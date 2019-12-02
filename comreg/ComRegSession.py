@@ -1,10 +1,9 @@
 import random
-from comreg.ComRegInit import ComRegInit
+from comreg.session import CRSession
 import comreg.search as comsrc
 from comreg.search import CRSearch
 
 session = None
-cmp = [10000, 23747, 10001, 10002, 234, 345, 457]
 cmp = [random.randrange(100000) for _ in range(100)]
 new = True
 
@@ -16,9 +15,9 @@ try:
         session = f.readline()
         print(session)
 except:
-    i = ComRegInit()
+    i = CRSession()
     i.run()
-    session = i.session
+    session = i.session_id
 
     with open("session", "w") as f:
         f.write(session)

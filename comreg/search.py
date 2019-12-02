@@ -177,7 +177,7 @@ class LegalEntityInformationParser(HTMLParser):
             return
 
         if self.keyword == LegalEntityInformationParser.KEYWORD_LEGAL_STRUCTURE:
-            self.result.structure = data if self.result.structure is None else self.result.structure + data
+            self.__set_structure(data)
         elif self.keyword == LegalEntityInformationParser.KEYWORD_CAPITAL:
             self.__set_capital(data)
         elif self.keyword == LegalEntityInformationParser.KEYWORD_ENTRY_DATE:
@@ -200,6 +200,13 @@ class LegalEntityInformationParser(HTMLParser):
 
             if self.keyword_tag:
                 self.keyword_tag = False
+
+    def __set_structure(self, data):
+        p = re.compile("^\s*(.*?)\s*$")
+        structure = p.match(data)
+
+        if structure is not None:
+            self.result.structure = structure.group(1)
 
     def __set_capital(self, data):
         p = re.compile("^(?:(?:\d{1,3})(?:\.\d{3})+|\d+)(?:,\d{1,2}){0,1} *(?:EUR|DEM|€){0,1}$")
@@ -230,7 +237,12 @@ class LegalEntityInformationParser(HTMLParser):
 
         if address is not None:
             self.result.address = address.group(1)
-            self.result.address += " " + address.group(2)
+
+            if self.result.address is not None:
+                number = address.group(2)
+
+                if number is not None:
+                    self.result.address += " " + number
 
     def __set_city(self, data):
         p = re.compile("^(?:(\d{5})\s+)?([^\d\n]+)$")
@@ -239,7 +251,6 @@ class LegalEntityInformationParser(HTMLParser):
         if city is not None:
             self.result.post_code = city.group(1)
             self.result.city = city.group(2)
-
 
 
 class CRLegalEntityInformation:
