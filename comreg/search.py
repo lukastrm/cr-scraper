@@ -128,6 +128,21 @@ class CRLegalEntityInformationLookUp:
         print(p.result)
 
 
+STATE_VOID = 0
+STATE_AWAIT_LEGAL_ENTITY_INFORMATION_HEADER = 1
+STATE_LEGAL_ENTITY_INFORMATION_HEADER = 2
+STATE_AWAIT_LEGAL_ENTITY_COURT = 3
+STATE_AWAIT_REGISTRY_DETAIL_SECTION = 4
+STATE_AWAIT_REGISTRY_DETAIL = 5
+STATE_REGISTRY_DETAIL = 6
+STATE_AWAIT_LEGAL_ENTITY_NAME = 7
+STATE_LEGAL_ENTITY_NAME = 8
+STATE_AWAIT_KEYWORD = 9
+STATE_KEYWORD = 10
+STATE_AWAIT_VALUE = 11
+STATE_VALUE = 12
+
+
 class LegalEntityInformationParser(HTMLParser):
 
     KEYWORD_LEGAL_STRUCTURE = "Rechtsform"
@@ -142,64 +157,99 @@ class LegalEntityInformationParser(HTMLParser):
 
     def __init__(self):
         super().__init__()
+        self.state = STATE_VOID
         self.result = CRLegalEntityInformation()
-        self.keyword_tag = False
         self.keyword = None
-        self.data_tag = False
-        self.previous = None
         self.address_index = 0
 
     def error(self, message):
         pass
 
     def handle_starttag(self, tag, attrs):
-        self.previous = tag
+        if tag == "h3":
+            self.state = STATE_AWAIT_LEGAL_ENTITY_INFORMATION_HEADER
+            return
 
         if tag == "td":
-            if self.keyword is None and not self.data_tag:
-                self.keyword_tag = True
-            elif self.keyword is not None:
-                self.data_tag = True
+            if self.state == STATE_LEGAL_ENTITY_INFORMATION_HEADER:
+                self.state = STATE_AWAIT_LEGAL_ENTITY_COURT
+            elif self.state == STATE_LEGAL_ENTITY_NAME or self.state == STATE_VALUE:
+                self.state = STATE_AWAIT_KEYWORD
+            elif self.state == STATE_KEYWORD:
+                self.state = STATE_AWAIT_VALUE
+
+        if tag == "b":
+            if self.state == STATE_AWAIT_REGISTRY_DETAIL_SECTION:
+                self.state = STATE_AWAIT_REGISTRY_DETAIL
 
     def handle_data(self, data):
-        if self.keyword_tag:
+        if self.state == STATE_AWAIT_LEGAL_ENTITY_INFORMATION_HEADER:
+            if "Unternehmensträgerdaten" in data:
+                self.state = STATE_LEGAL_ENTITY_INFORMATION_HEADER
+        elif self.state == STATE_AWAIT_LEGAL_ENTITY_COURT:
+            if "Amtsgericht" in data:
+                self.state = STATE_AWAIT_REGISTRY_DETAIL_SECTION
+        elif self.state == STATE_AWAIT_REGISTRY_DETAIL:
+            self.__set_registry_information(data)
+            self.state = STATE_REGISTRY_DETAIL
+        elif self.state == STATE_AWAIT_LEGAL_ENTITY_NAME:
+            self.__set_name(data)
+            self.state = STATE_LEGAL_ENTITY_NAME
+        elif self.state == STATE_AWAIT_KEYWORD:
+            self.state = STATE_KEYWORD
+
             for keyword in LegalEntityInformationParser.KEYWORDS:
                 if data.strip().startswith(keyword):
                     self.keyword = keyword
                     return
 
-        if not self.data_tag:
-            return
+            self.keyword = None
+        elif self.state == STATE_AWAIT_VALUE:
+            self.state = STATE_VALUE
+            self.__handle_value(data)
 
-        data = data.strip()
-
-        if not data:
-            return
-
+    def __handle_value(self, value):
         if self.keyword == LegalEntityInformationParser.KEYWORD_LEGAL_STRUCTURE:
-            self.__set_structure(data)
+            self.__set_structure(value)
         elif self.keyword == LegalEntityInformationParser.KEYWORD_CAPITAL:
-            self.__set_capital(data)
+            self.__set_capital(value)
         elif self.keyword == LegalEntityInformationParser.KEYWORD_ENTRY_DATE:
-            self.__set_date(data, True)
+            self.__set_date(value, True)
         elif self.keyword == LegalEntityInformationParser.KEYWORD_DELETION_DATE:
-            self.__set_date(data, False)
+            self.__set_date(value, False)
         elif self.keyword == LegalEntityInformationParser.KEYWORD_BALANCE:
-            self.result.balance = data if self.result.balance is None else self.result.balance + data
+            self.result.balance = value if self.result.balance is None else self.result.balance + value
         elif self.keyword == LegalEntityInformationParser.KEYWORD_ADDRESS:
-            if self.previous == "div":
-                self.__set_city(data)
-            else:
-                self.__set_address(data)
+            pass
 
     def handle_endtag(self, tag):
-        if tag == "td":
-            if self.data_tag:
-                self.keyword = None
-                self.data_tag = False
+        if tag == "h3":
+            if self.state == STATE_AWAIT_LEGAL_ENTITY_INFORMATION_HEADER:
+                self.state = STATE_VOID
 
-            if self.keyword_tag:
-                self.keyword_tag = False
+        if tag == "td":
+            if self.state == STATE_AWAIT_LEGAL_ENTITY_COURT:
+                self.state = STATE_LEGAL_ENTITY_INFORMATION_HEADER
+
+        if tag == "b":
+            if self.state == STATE_REGISTRY_DETAIL:
+                self.state = STATE_AWAIT_LEGAL_ENTITY_NAME
+
+    def __set_registry_information(self, data):
+        p = re.compile("^\s*(.*?)\s+(HRA|HRB|GnR|PR|VR)\s+(\d*?)\s*$")
+        information = p.match(data)
+
+        if information is not None:
+            self.result.court = information.group(1)
+            self.result.registry_type = information.group(2)
+            self.result.registry_id = int(information.group(3))
+
+    def __set_name(self, data):
+        p = re.compile("^\s*–\s*(.*?)\s*$")
+        name = p.match(data)
+
+        if name is not None:
+            self.result.name = name.group(1)
 
     def __set_structure(self, data):
         p = re.compile("^\s*(.*?)\s*$")
@@ -209,27 +259,22 @@ class LegalEntityInformationParser(HTMLParser):
             self.result.structure = structure.group(1)
 
     def __set_capital(self, data):
-        p = re.compile("^(?:(?:\d{1,3})(?:\.\d{3})+|\d+)(?:,\d{1,2}){0,1} *(?:EUR|DEM|€){0,1}$")
-        capital = p.findall(data)
+        p = re.compile("^\s*((?:(?:\d{1,3})(?:\.\d{3})+|\d+)(?:,\d{1,2}){0,1})\s*(EUR|DEM|€){0,1}\s*$")
+        capital = p.match(data)
 
-        if len(capital) > 0:
-            self.result.capital = capital[0]
-
-            if len(capital) > 1:
-                raise ValueError("Multiple capital entries:" + str(capital))
+        if capital is not None:
+            self.result.capital = capital.group(1)
+            self.result.capital_currency = capital.group(2)
 
     def __set_date(self, data, entry):
-        p = re.compile("^\d{2}.\d{2}.\d{4}")
-        date = p.findall(data)
+        p = re.compile("^\s*(\d{2}.\d{2}.\d{4})")
+        date = p.match(data)
 
-        if len(date) > 0:
+        if date is not None:
             if entry:
-                self.result.entry = date[0]
+                self.result.entry = date.group(1)
             else:
-                self.result.deletion = date[0]
-
-            if len(date) > 1:
-                raise ValueError("Multiple entry dates:" + str(date))
+                self.result.deletion = date.group(1)
 
     def __set_address(self, data):
         p = re.compile("^([^\d\n]*[^\d\n\s])\s*(\d+[^\d\n\s-]?(?:-\d+[^\d\n\s]?)?)?$")
@@ -255,9 +300,16 @@ class LegalEntityInformationParser(HTMLParser):
 
 class CRLegalEntityInformation:
 
-    def __init__(self, structure=None, capital=None, entry=None, deletion=None, balance=None, address=None, post_code=None, city=None):
+    def __init__(self, name=None, court=None, registry_type=None, registry_id=None, structure=None, capital=None,
+                 capital_currency=None, entry=None, deletion=None, balance=None, address=None, post_code=None,
+                 city=None):
+        self.name = name
+        self.court = court
+        self.registry_type = registry_type
+        self.registry_id = registry_id
         self.structure = structure
         self.capital = capital
+        self.capital_currency = capital_currency
         self.entry = entry
         self.deletion = deletion
         self.balance = balance
