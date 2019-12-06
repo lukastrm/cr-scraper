@@ -1,10 +1,12 @@
 import random
+from comreg.file import LegalEntityInformationFileWriter
 from comreg.session import CRSession
 import comreg.search as comsrc
 from comreg.search import CRSearch
 
 session = None
-cmp = [random.randrange(100000) for _ in range(100)]
+#cmp = [20747, 12345]
+cmp = [random.randrange(100000) for _ in range(10)]
 new = True
 
 try:
@@ -24,10 +26,15 @@ except:
 
 print(session)
 
-for idi in cmp:
-    s = CRSearch(session)
-    s.set_param(comsrc.PARAM_REGISTER_ID, idi)
-    s.run()
-    print(idi, end=" ")
-    e = comsrc.CRLegalEntityInformationLookUp(session, 0)
-    e.fetch()
+with LegalEntityInformationFileWriter("test1.csv") as csvwriter1:
+    for idi in cmp:
+        s = CRSearch(session)
+        s.set_param(comsrc.PARAM_REGISTER_ID, idi)
+        s.run()
+        print(idi, end=" ")
+        e = comsrc.CRLegalEntityInformationLookUp(session, 0)
+        e.fetch()
+        print(e.result)
+        csvwriter1.write(e.result)
+
+

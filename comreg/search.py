@@ -115,6 +115,7 @@ class CRLegalEntityInformationLookUp:
         self.session = session
         self.index = search_result_index
         self.url = url
+        self.result = None
 
     def fetch(self):
         result = rq.get(self.url, params={"doctyp": "UT", "index": self.index}, cookies={"JSESSIONID": self.session, "language": "de"})
@@ -125,7 +126,7 @@ class CRLegalEntityInformationLookUp:
         if "Fehler" in result.text:
             print("FEHLER")
 
-        print(p.result)
+        self.result = p.result
 
 
 STATE_VOID = 0
@@ -141,6 +142,14 @@ STATE_AWAIT_KEYWORD = 9
 STATE_KEYWORD = 10
 STATE_AWAIT_VALUE = 11
 STATE_VALUE = 12
+
+SUB_STATE_VOID = 0
+SUB_STATE_AWAIT_STREET = 1
+SUB_STATE_STREET = 2
+SUB_STATE_AWAIT_CITY = 3
+SUB_STATE_CITY = 4
+SUB_STATE_AWAIT_BALANCE_OPTION = 5
+SUB_STATE_AWAIT_BALANCE = 6
 
 
 class LegalEntityInformationParser(HTMLParser):
@@ -158,9 +167,9 @@ class LegalEntityInformationParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.state = STATE_VOID
+        self.sub_state = SUB_STATE_VOID
         self.result = CRLegalEntityInformation()
         self.keyword = None
-        self.address_index = 0
 
     def error(self, message):
         pass
@@ -169,18 +178,27 @@ class LegalEntityInformationParser(HTMLParser):
         if tag == "h3":
             self.state = STATE_AWAIT_LEGAL_ENTITY_INFORMATION_HEADER
             return
-
-        if tag == "td":
+        elif tag == "td":
             if self.state == STATE_LEGAL_ENTITY_INFORMATION_HEADER:
                 self.state = STATE_AWAIT_LEGAL_ENTITY_COURT
             elif self.state == STATE_LEGAL_ENTITY_NAME or self.state == STATE_VALUE:
                 self.state = STATE_AWAIT_KEYWORD
             elif self.state == STATE_KEYWORD:
                 self.state = STATE_AWAIT_VALUE
-
-        if tag == "b":
+        elif tag == "b":
             if self.state == STATE_AWAIT_REGISTRY_DETAIL_SECTION:
                 self.state = STATE_AWAIT_REGISTRY_DETAIL
+        elif tag == "div":
+            if self.state == STATE_AWAIT_VALUE and self.sub_state == SUB_STATE_STREET:
+                self.sub_state = SUB_STATE_AWAIT_CITY
+        elif tag == "select":
+            if self.state == STATE_AWAIT_VALUE:
+                self.result.balance = []
+                self.sub_state = SUB_STATE_AWAIT_BALANCE_OPTION
+        elif tag == "option":
+            if self.state == STATE_AWAIT_VALUE:
+                if self.sub_state == SUB_STATE_AWAIT_BALANCE_OPTION:
+                    self.sub_state = SUB_STATE_AWAIT_BALANCE
 
     def handle_data(self, data):
         if self.state == STATE_AWAIT_LEGAL_ENTITY_INFORMATION_HEADER:
@@ -205,7 +223,6 @@ class LegalEntityInformationParser(HTMLParser):
 
             self.keyword = None
         elif self.state == STATE_AWAIT_VALUE:
-            self.state = STATE_VALUE
             self.__handle_value(data)
 
     def __handle_value(self, value):
@@ -218,22 +235,40 @@ class LegalEntityInformationParser(HTMLParser):
         elif self.keyword == LegalEntityInformationParser.KEYWORD_DELETION_DATE:
             self.__set_date(value, False)
         elif self.keyword == LegalEntityInformationParser.KEYWORD_BALANCE:
-            self.result.balance = value if self.result.balance is None else self.result.balance + value
+            if self.sub_state == SUB_STATE_AWAIT_BALANCE:
+                self.__process_balance(value)
         elif self.keyword == LegalEntityInformationParser.KEYWORD_ADDRESS:
-            pass
+            if self.sub_state == SUB_STATE_VOID:
+                self.sub_state = SUB_STATE_AWAIT_STREET
+            elif self.sub_state == SUB_STATE_AWAIT_STREET:
+                self.__set_address(value)
+                self.sub_state = SUB_STATE_STREET
+            elif self.sub_state == SUB_STATE_AWAIT_CITY:
+                self.__set_city(value)
+                self.sub_state = SUB_STATE_CITY
 
     def handle_endtag(self, tag):
         if tag == "h3":
             if self.state == STATE_AWAIT_LEGAL_ENTITY_INFORMATION_HEADER:
                 self.state = STATE_VOID
-
-        if tag == "td":
+        elif tag == "td":
             if self.state == STATE_AWAIT_LEGAL_ENTITY_COURT:
                 self.state = STATE_LEGAL_ENTITY_INFORMATION_HEADER
-
-        if tag == "b":
+            elif self.state == STATE_AWAIT_VALUE:
+                self.state = STATE_VALUE
+        elif tag == "b":
             if self.state == STATE_REGISTRY_DETAIL:
                 self.state = STATE_AWAIT_LEGAL_ENTITY_NAME
+        elif tag == "div":
+            if self.sub_state == SUB_STATE_CITY:
+                self.sub_state = SUB_STATE_VOID
+                self.state = STATE_VALUE
+        elif tag == "option":
+            if self.sub_state == SUB_STATE_AWAIT_BALANCE:
+                self.sub_state = SUB_STATE_AWAIT_BALANCE_OPTION
+        elif tag == "select":
+            if self.sub_state == SUB_STATE_AWAIT_BALANCE_OPTION:
+                self.sub_state = SUB_STATE_VOID
 
     def __set_registry_information(self, data):
         p = re.compile("^\s*(.*?)\s+(HRA|HRB|GnR|PR|VR)\s+(\d*?)\s*$")
@@ -263,7 +298,7 @@ class LegalEntityInformationParser(HTMLParser):
         capital = p.match(data)
 
         if capital is not None:
-            self.result.capital = capital.group(1)
+            self.result.capital = int(capital.group(1))
             self.result.capital_currency = capital.group(2)
 
     def __set_date(self, data, entry):
@@ -276,21 +311,23 @@ class LegalEntityInformationParser(HTMLParser):
             else:
                 self.result.deletion = date.group(1)
 
+    def __process_balance(self, data):
+        p = re.compile("^\s*(\d{2}.\d{2}.\d{4})\s*$")
+        date = p.match(data)
+
+        if date is not None:
+            self.result.balance.append(date.group(1))
+
     def __set_address(self, data):
-        p = re.compile("^([^\d\n]*[^\d\n\s])\s*(\d+[^\d\n\s-]?(?:-\d+[^\d\n\s]?)?)?$")
+        #p = re.compile("^\s*([^\d\n]*[^\d\n\s])\s*(\d+[^\d\n\s-]?(?:-\d+[^\d\n\s]?)?)?\s*$")
+        p = re.compile("^\s*(.*?)\s*$")
         address = p.match(data)
 
         if address is not None:
             self.result.address = address.group(1)
 
-            if self.result.address is not None:
-                number = address.group(2)
-
-                if number is not None:
-                    self.result.address += " " + number
-
     def __set_city(self, data):
-        p = re.compile("^(?:(\d{5})\s+)?([^\d\n]+)$")
+        p = re.compile("^\s*(?:(\d{5})\s+)?([^\d\n]+)\s*$")
         city = p.match(data)
 
         if city is not None:
