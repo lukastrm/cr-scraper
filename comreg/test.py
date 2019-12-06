@@ -1,5 +1,5 @@
 import random
-from comreg.file import LegalEntityInformationFileWriter
+from comreg.file import LegalEntityInformationFileWriter, LegalEntityBalanceDatesFileWriter
 from comreg.session import CRSession
 import comreg.search as comsrc
 from comreg.search import CRSearch
@@ -19,14 +19,15 @@ try:
 except:
     i = CRSession()
     i.run()
-    session = i.session_id
+    session = i.identifier
 
     with open("session", "w") as f:
         f.write(session)
 
 print(session)
 
-with LegalEntityInformationFileWriter("test1.csv") as csvwriter1:
+with LegalEntityInformationFileWriter("test1.txt") as csvwriter1, \
+        LegalEntityBalanceDatesFileWriter("test2.csv") as csvwriter2:
     for idi in cmp:
         s = CRSearch(session)
         s.set_param(comsrc.PARAM_REGISTER_ID, idi)
@@ -36,5 +37,6 @@ with LegalEntityInformationFileWriter("test1.csv") as csvwriter1:
         e.fetch()
         print(e.result)
         csvwriter1.write(e.result)
+        csvwriter2.write(e.result)
 
 

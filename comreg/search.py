@@ -1,12 +1,20 @@
 """
 Copyright (c) 2019 trm factory, Lukas Trommer
-"""
+All rights reserved.
 
+These software resources were developed for the Entrepreneurial Group Dynamics research project at the
+Technical University of Berlin.
+Every distribution, modification, performing and every other type of usage is strictly prohibited if not
+explicitly allowed by the package license agreement, service contract or other legal regulations.
+"""
 from html.parser import HTMLParser
 import requests as rq
 import re
 
-DEFAULT_URL = "https://www.handelsregister.de/rp_web/search.do"
+from comreg.session import CRSession
+from comreg.struct import LegalEntityInformation
+
+DEFAULT_SEARCH_URL = "https://www.handelsregister.de/rp_web/search.do"
 DEFAULT_ENTITY_INFORMATION_URL = "https://www.handelsregister.de/rp_web/charge-info.do"
 DEFAULT_DOCUMENT_URL = "https://www.handelsregister.de/rp_web/document.do"
 
@@ -25,9 +33,9 @@ class CRSearch:
     """ This class performs a single search request with given registry parameters.
     """
 
-    def __init__(self, session, url=DEFAULT_URL, params=None):
-        if session is None:
-            raise ValueError("session must not be None")
+    def __init__(self, session: CRSession, url=DEFAULT_SEARCH_URL, params=None):
+        if not session or not session.identifier:
+            raise ValueError("session oder session identifier must not be None or empty")
 
         if url is None:
             raise ValueError("url must not be None")
@@ -57,7 +65,8 @@ class CRSearch:
         return self.result
 
     def __fetch(self):
-        result = rq.post(self.url + ";jsessionid=" + self.session, data=self.params, cookies={"JSESSIONID": self.session, "language": "de"})
+        result = rq.post(self.url + ";jsessionid=" + self.session.identifier, data=self.params,
+                         cookies={"JSESSIONID": self.session.identifier, "language": "de"})
         return result.text
 
     def __parse(self, result):
@@ -118,7 +127,7 @@ class CRLegalEntityInformationLookUp:
         self.result = None
 
     def fetch(self):
-        result = rq.get(self.url, params={"doctyp": "UT", "index": self.index}, cookies={"JSESSIONID": self.session, "language": "de"})
+        result = rq.get(self.url, params={"doctyp": "UT", "index": self.index}, cookies={"JSESSIONID": self.session.identifier, "language": "de"})
 
         p = LegalEntityInformationParser()
         p.feed(result.text)
@@ -168,7 +177,7 @@ class LegalEntityInformationParser(HTMLParser):
         super().__init__()
         self.state = STATE_VOID
         self.sub_state = SUB_STATE_VOID
-        self.result = CRLegalEntityInformation()
+        self.result = LegalEntityInformation()
         self.keyword = None
 
     def error(self, message):
@@ -275,7 +284,7 @@ class LegalEntityInformationParser(HTMLParser):
         information = p.match(data)
 
         if information is not None:
-            self.result.court = information.group(1)
+            self.result.registry_court = information.group(1)
             self.result.registry_type = information.group(2)
             self.result.registry_id = int(information.group(3))
 
@@ -298,7 +307,7 @@ class LegalEntityInformationParser(HTMLParser):
         capital = p.match(data)
 
         if capital is not None:
-            self.result.capital = int(capital.group(1))
+            self.result.capital = float(capital.group(1).replace(".", "").replace(",", "."))
             self.result.capital_currency = capital.group(2)
 
     def __set_date(self, data, entry):
@@ -333,29 +342,3 @@ class LegalEntityInformationParser(HTMLParser):
         if city is not None:
             self.result.post_code = city.group(1)
             self.result.city = city.group(2)
-
-
-class CRLegalEntityInformation:
-
-    def __init__(self, name=None, court=None, registry_type=None, registry_id=None, structure=None, capital=None,
-                 capital_currency=None, entry=None, deletion=None, balance=None, address=None, post_code=None,
-                 city=None):
-        self.name = name
-        self.court = court
-        self.registry_type = registry_type
-        self.registry_id = registry_id
-        self.structure = structure
-        self.capital = capital
-        self.capital_currency = capital_currency
-        self.entry = entry
-        self.deletion = deletion
-        self.balance = balance
-        self.address = address
-        self.post_code = post_code
-        self.city = city
-
-    def __repr__(self):
-        return str(self)
-
-    def __str__(self):
-        return str(self.__dict__)
