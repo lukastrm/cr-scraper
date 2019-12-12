@@ -1,5 +1,5 @@
 """
-Copyright (c) 2019 trm factory, Lukas Trommer
+Copyright (c) 2020 trm factory, Lukas Trommer
 All rights reserved.
 
 These software resources were developed for the Entrepreneurial Group Dynamics research project at the

@@ -1,5 +1,5 @@
 """
-Copyright (c) 2019 trm factory, Lukas Trommer
+Copyright (c) 2020 trm factory, Lukas Trommer
 All rights reserved.
 
 These software resources were developed for the Entrepreneurial Group Dynamics research project at the
@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 import requests as rq
 import re
 
-from comreg.session import CRSession
+from comreg.session import Session
 from comreg.struct import LegalEntityInformation
 
 DEFAULT_SEARCH_URL = "https://www.handelsregister.de/rp_web/search.do"
@@ -33,7 +33,7 @@ class CRSearch:
     """ This class performs a single search request with given registry parameters.
     """
 
-    def __init__(self, session: CRSession, url=DEFAULT_SEARCH_URL, params=None):
+    def __init__(self, session: Session, url=DEFAULT_SEARCH_URL, params=None):
         if not session or not session.identifier:
             raise ValueError("session oder session identifier must not be None or empty")
 

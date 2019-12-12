@@ -1,5 +1,5 @@
 """
-Copyright (c) 2019 trm factory, Lukas Trommer
+Copyright (c) 2020 trm factory, Lukas Trommer
 All rights reserved.
 
 These software resources were developed for the Entrepreneurial Group Dynamics research project at the
@@ -10,7 +10,7 @@ explicitly allowed by the package license agreement, service contract or other l
 import requests as rq
 
 
-class CRSession:
+class Session:
 
     def __init__(self):
         self.identifier = None
