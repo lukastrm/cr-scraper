@@ -8,12 +8,12 @@ Every distribution, modification, performing and every other type of usage is st
 explicitly allowed by the package license agreement, service contract or other legal regulations.
 """
 import re
-import requests as rq
+import requests
 from html.parser import HTMLParser
 from typing import List, Tuple, Optional, Dict
 from difflib import SequenceMatcher
 
-from comreg.session import Session
+from comreg.service import Session
 
 _DEFAULT_SEARCH_FORM_URL = "https://www.handelsregister.de/rp_web/mask.do?Typ=n"
 
@@ -122,20 +122,22 @@ class CourtListFetcher:
         defaults to the commercial register search form URL
         """
 
-        self.session: Session = session
-        self.url: str = url
+        self.__session: Session = session
+        self.__url: str = url
         self.result: Optional[CourtList] = None
 
-    def run(self):
+    def run(self) -> Optional[CourtList]:
         """Runs the fetching operation."""
 
-        self.__fetch()
+        result = requests.get(self.__url, cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
 
-    def __fetch(self):
-        result = rq.get(self.url, cookies={"JSESSIONID": self.session.identifier, "language": "de"})
-        parser = CourtListParser()
-        parser.feed(result.text)
-        self.result = CourtList(parser.result)
+        if result.status_code == 200:
+            parser = CourtListParser()
+            parser.feed(result.text)
+            self.result = CourtList(parser.result)
+            return self.result
+
+        return None
 
 
 class CourtListParser(HTMLParser):
@@ -149,9 +151,9 @@ class CourtListParser(HTMLParser):
 
     def __init__(self):
         super().__init__()
-        self.state: int = _STATE_VOID
+        self.__state: int = _STATE_VOID
         self.result: List[Court] = []
-        self.court: Optional[Court] = None
+        self.__court: Optional[Court] = None
 
     def error(self, message):
         pass
@@ -160,9 +162,9 @@ class CourtListParser(HTMLParser):
         if tag == "select":
             for attr_name, attr_value in attrs:
                 if attr_name == "name" and attr_value == "registergericht":
-                    self.state = _STATE_AWAIT_OPTION
+                    self.__state = _STATE_AWAIT_OPTION
         elif tag == "option":
-            if self.state != _STATE_AWAIT_OPTION:
+            if self.__state != _STATE_AWAIT_OPTION:
                 return
 
             identifier: Optional[str] = None
@@ -172,24 +174,24 @@ class CourtListParser(HTMLParser):
                     identifier = attr_value
 
             if identifier and re.search(r"\A[A-Z]\d{4}\Z", identifier):
-                self.court = Court(identifier)
-                self.state = _STATE_AWAIT_NAME
+                self.__court = Court(identifier)
+                self.__state = _STATE_AWAIT_NAME
             else:
-                self.state = _STATE_NAME
+                self.__state = _STATE_NAME
 
     def handle_data(self, data):
-        if self.state == _STATE_AWAIT_NAME:
-            self.court.name = data.strip()
-            self.state = _STATE_NAME
+        if self.__state == _STATE_AWAIT_NAME:
+            self.__court.name = data.strip()
+            self.__state = _STATE_NAME
 
     def handle_endtag(self, tag):
         if tag == "select":
-            if self.state == _STATE_AWAIT_OPTION:
-                self.state = _STATE_VOID
+            if self.__state == _STATE_AWAIT_OPTION:
+                self.__state = _STATE_VOID
         elif tag == "option":
-            if self.state == _STATE_NAME:
-                self.state = _STATE_AWAIT_OPTION
+            if self.__state == _STATE_NAME:
+                self.__state = _STATE_AWAIT_OPTION
 
-                if self.court is not None:
-                    self.result.append(self.court)
-                    self.court = None
+                if self.__court is not None:
+                    self.result.append(self.__court)
+                    self.__court = None

@@ -9,11 +9,27 @@ explicitly allowed by the package license agreement, service contract or other l
 """
 import csv
 import re
+from typing import Optional
 
 from comreg.entity import LegalEntityInformation, ShareHolderLists
-from comreg.struct import SearchInputRecord
 
 ENCODING = "utf-8"
+
+
+class SearchInputRecord:
+
+    def __init__(self, name: str = None, registry_type: str = None, registry_id: str = None,
+                 registry_court: str = None):
+        self.name: str = name
+        self.registry_type: str = registry_type
+        self.registry_id: str = registry_id
+        self.registry_court: str = registry_court
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return str(self.__dict__)
 
 
 class SearchInputDataFileReader:
@@ -34,28 +50,23 @@ class SearchInputDataFileReader:
     def __iter__(self):
         return self
 
-    def __next__(self) -> SearchInputRecord:
+    def __next__(self) -> Optional[SearchInputRecord]:
         if self.header:
             next(self.reader)
             self.header = False
 
         raw: str = next(self.reader)
+
+        if len(raw) < 6:
+            return None
+
         name: str = raw[0]
-        registry_type = raw[3]
-
-        reg_id = re.match(r"^\D*(\d+)?\D*$", raw[2])
-
-        if reg_id is not None:
-            registry_id = reg_id.group(1)
-
-            if registry_id is not None:
-                registry_id = int(registry_id)
-
+        registry_id = re.match(r"^\D*(\d+ ?\w{0,2})\s*$", raw[2])
+        registry_type: str = raw[3]
         registry_court = raw[5]
 
-        print([name, registry_type, registry_id, registry_court])
-
-        return SearchInputRecord(name, registry_type, registry_id, registry_court)
+        return SearchInputRecord(name, registry_type, None if registry_id is None else registry_id.group(1),
+                                 registry_court)
 
 
 _COL_NAME = "name"
@@ -76,23 +87,25 @@ _COL_CITY = "city"
 class LegalEntityInformationFileWriter:
 
     def __init__(self, file: str):
-        self.file = open(file, "w", encoding=ENCODING, newline="")
-        self.writer = csv.writer(self.file)
+        self.__file = open(file, "w", encoding=ENCODING, newline="")
+        self.__writer = csv.writer(self.__file)
 
     def __enter__(self):
-        self.writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
-                              _COL_CAPITAL, _COL_CAPITAL_CURRENCY, _COL_ENTRY, _COL_DELETION, _COL_BALANCE, _COL_ADDRESS,
-                              _COL_POST_CODE, _COL_CITY])
+        self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
+                                _COL_CAPITAL, _COL_CAPITAL_CURRENCY, _COL_ENTRY, _COL_DELETION, _COL_BALANCE,
+                                _COL_ADDRESS, _COL_POST_CODE, _COL_CITY])
+        self.__file.flush()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.file.close()
+        self.__file.close()
 
     def write(self, entity: LegalEntityInformation):
-        self.writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
-                              entity.structure, entity.capital, entity.capital_currency, entity.entry, entity.deletion,
-                              entity.balance is not None and not entity.balance, entity.address, entity.post_code,
-                              entity.city])
+        self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
+                                entity.structure, entity.capital, entity.capital_currency, entity.entry,
+                                entity.deletion, entity.balance is not None and not entity.balance, entity.address,
+                                entity.post_code, entity.city])
+        self.__file.flush()
 
 
 class LegalEntityBalanceDatesFileWriter:
@@ -103,6 +116,7 @@ class LegalEntityBalanceDatesFileWriter:
 
     def __enter__(self):
         self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_BALANCE])
+        self.__file.flush()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -113,6 +127,7 @@ class LegalEntityBalanceDatesFileWriter:
             for date in entity.balance:
                 self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
                                         date])
+                self.__file.flush()
 
 
 _COL_LIST_INDEX = "list_index"

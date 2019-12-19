@@ -10,11 +10,9 @@ explicitly allowed by the package license agreement, service contract or other l
 from html.parser import HTMLParser
 import requests as rq
 
-from comreg.session import Session
+from comreg.service import Session
 
 DEFAULT_SEARCH_URL = "https://www.handelsregister.de/rp_web/search.do"
-DEFAULT_ENTITY_INFORMATION_URL = "https://www.handelsregister.de/rp_web/charge-info.do"
-DEFAULT_DOCUMENT_URL = "https://www.handelsregister.de/rp_web/document.do"
 
 PARAM_BUTTON_SEARCH = "btnSuche"
 PARAM_RESULTS_PER_PAGE = "ergebnisseProSeite"
@@ -27,20 +25,32 @@ PARAM_KEYWORD_OPTIONS = "schlagwortOptionen"
 PARAM_SEARCH_TYPE = "suchTyp"
 
 
+class SearchParameters:
+
+    def __init__(self):
+        pass
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return str(self.__dict__)
+
+
 class SearchRequest:
     """ This class performs a single search request with given registry parameters.
     """
 
-    def __init__(self, session: Session, url=DEFAULT_SEARCH_URL, params=None):
+    def __init__(self, session: Session, url=DEFAULT_SEARCH_URL, parameters=None):
         if not session or not session.identifier:
             raise ValueError("session oder session identifier must not be None or empty")
 
         if url is None:
             raise ValueError("url must not be None")
 
-        self.session = session
-        self.url = url
-        self.params = params if params is not None else {
+        self.__session = session
+        self.__url = url
+        self.__parameters = parameters if parameters is not None else {
             PARAM_BUTTON_SEARCH: "Suchen",
             PARAM_RESULTS_PER_PAGE: 10,
             PARAM_ESTABLISHMENT: None,
@@ -55,22 +65,24 @@ class SearchRequest:
         self.result = None
 
     def set_param(self, name, value):
-        self.params[name] = value
+        self.__parameters[name] = value
 
     def run(self):
-        raw = self.__fetch()
-        self.__parse(raw)
+        raw = self.__request()
+
+        if raw is not None:
+            parser = SearchResultParser()
+            parser.feed(raw)
+            self.result = parser.result
+        else:
+            self.result = None
+
         return self.result
 
-    def __fetch(self):
-        result = rq.post(self.url + ";jsessionid=" + self.session.identifier, data=self.params,
-                         cookies={"JSESSIONID": self.session.identifier, "language": "de"})
+    def __request(self):
+        result = rq.post(self.__url + ";jsessionid=" + self.__session.identifier, data=self.__parameters,
+                         cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
         return result.text
-
-    def __parse(self, result):
-        p = SearchResultParser()
-        p.feed(result)
-        self.result = p.result
 
 
 class SearchResultParser(HTMLParser):

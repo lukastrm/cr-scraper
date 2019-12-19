@@ -8,23 +8,24 @@ Every distribution, modification, performing and every other type of usage is st
 explicitly allowed by the package license agreement, service contract or other legal regulations.
 """
 import re
-from html.parser import HTMLParser
-from typing import List
 import requests
+from html.parser import HTMLParser
+from typing import List, Optional
 
-DEFAULT_DOCUMENT_URL = "https://www.handelsregister.de/rp_web/document.do"
+from comreg.search import SearchResultEntry
+from comreg.service import DEFAULT_DOCUMENT_URL
 
 
 class LegalEntityInformation:
 
-    def __init__(self, name: str = None, court: str = None, registry_type: str = None, registry_id: int = None,
+    def __init__(self, name: str = None, court: str = None, registry_type: str = None, registry_id: str = None,
                  structure: str = None, capital: int = None, capital_currency: str = None, entry: str = None,
                  deletion: str = None, balance: List[str] = None, address: str = None, post_code: str = None,
                  city: str = None):
         self.name: str = name
         self.registry_court: str = court
         self.registry_type: str = registry_type
-        self.registry_id: int = registry_id
+        self.registry_id: str = registry_id
         self.structure: str = structure
         self.capital: int = capital
         self.capital_currency: str = capital_currency
@@ -44,9 +45,9 @@ class LegalEntityInformation:
 
 class ShareHolderLists:
 
-    def __init__(self, entity: LegalEntityInformation):
+    def __init__(self, entity: LegalEntityInformation, dates: Optional[List[str]]):
         self.entity = entity
-        self.dates = []
+        self.dates = [] if dates is None else dates
 
     def __repr__(self) -> str:
         return str(self)
@@ -57,23 +58,28 @@ class ShareHolderLists:
 
 class LegalEntityInformationFetcher:
 
-    def __init__(self, session, search_result_index, url=DEFAULT_DOCUMENT_URL):
-        self.session = session
-        self.index = search_result_index
-        self.url = url
-        self.result = None
+    def __init__(self, session, search_result_entry: SearchResultEntry, url=DEFAULT_DOCUMENT_URL):
+        self.__session = session
+        self.__entry: SearchResultEntry = search_result_entry
+        self.__url = url
+        self.result: Optional[LegalEntityInformation] = None
 
-    def fetch(self):
-        result = requests.get(self.url, params={"doctyp": "UT", "index": self.index},
-                              cookies={"JSESSIONID": self.session.identifier, "language": "de"})
+    def fetch(self) -> Optional[LegalEntityInformation]:
+        result = requests.get(self.__url, params={"doctyp": "UT", "index": self.__entry.index},
+                              cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
 
-        p = LegalEntityInformationParser()
-        p.feed(result.text)
+        if result.status_code == 200:
+            parser = LegalEntityInformationParser()
+            parser.feed(result.text)
 
-        if "Fehler" in result.text:
-            print("FEHLER")
+            # TODO: Better solution
+            if "Fehler" in result.text:
+                print("FEHLER")
 
-        self.result = p.result
+            self.result = parser.result
+            return self.result
+
+        return None
 
 
 STATE_VOID = 0
@@ -218,13 +224,12 @@ class LegalEntityInformationParser(HTMLParser):
                 self.sub_state = SUB_STATE_VOID
 
     def __set_registry_information(self, data):
-        p = re.compile(r"^\s*(.*?)\s+(HRA|HRB|GnR|PR|VR)\s+(\d*?)\s*$")
-        information = p.match(data)
+        information = re.match(r"^\s*(.*?)\s+(HRA|HRB|GnR|PR|VR)\s+(\d*?(?:\s+[a-zA-Z]{1,2})?)\s*$", data)
 
         if information is not None:
             self.result.registry_court = information.group(1)
             self.result.registry_type = information.group(2)
-            self.result.registry_id = int(information.group(3))
+            self.result.registry_id = re.sub(r"\s\s+", " ", information.group(3))
 
     def __set_name(self, data):
         p = re.compile(r"^\s*–\s*(.*?)\s*$")

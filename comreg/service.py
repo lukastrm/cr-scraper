@@ -9,6 +9,9 @@ explicitly allowed by the package license agreement, service contract or other l
 """
 import requests
 
+DEFAULT_SEARCH_URL = "https://www.handelsregister.de/rp_web/search.do"
+DEFAULT_DOCUMENT_URL = "https://www.handelsregister.de/rp_web/document.do"
+
 
 class Session:
 

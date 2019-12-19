@@ -14,7 +14,7 @@ from comreg.court import CourtListFetcher
 from comreg.entity import LegalEntityInformationFetcher
 from comreg.file import SearchInputDataFileReader, LegalEntityInformationFileWriter, LegalEntityBalanceDatesFileWriter
 from comreg.search import SearchRequest, PARAM_REGISTER_TYPE, PARAM_REGISTER_COURT, PARAM_REGISTER_ID, PARAM_KEYWORDS
-from comreg.session import Session
+from comreg.service import Session
 
 
 def main():
@@ -53,6 +53,10 @@ def main():
     court_list_fetcher.run()
     court_list = court_list_fetcher.result
 
+    max_search_requests = 100
+    search_request_counter: int = 0
+    search_request_successful: int = 0
+
     with SearchInputDataFileReader(files[0]) as reader, \
             LegalEntityInformationFileWriter("information.csv") as information_writer, \
             LegalEntityBalanceDatesFileWriter("balances.csv") as balance_writer:
@@ -60,7 +64,7 @@ def main():
             search = SearchRequest(session)
             search.set_param(PARAM_REGISTER_TYPE, record.registry_type)
             search.set_param(PARAM_REGISTER_ID, record.registry_id)
-            search.params[PARAM_KEYWORDS] = record.name
+            search.__params[PARAM_KEYWORDS] = record.name
 
             if record.registry_court is not None:
                 court = court_list.get_from_name(record.registry_court)
@@ -73,26 +77,36 @@ def main():
                     else:
                         print("Closest match for {} is court {} with identifier {}".format(record.registry_court, court.name, court.identifier))
 
-            search.params[PARAM_REGISTER_COURT] = court.identifier
+            search.__params[PARAM_REGISTER_COURT] = court.identifier
             search.run()
-
-            print("{} {} at {}: {}".format(record.registry_type, record.registry_id, record.registry_court, search.result))
+            search_request_counter += 1
 
             if len(search.result) == 0:
-                print("No result")
+                print("No result for name {} with identifier {} {} at court {}"
+                      .format(record.name, record.registry_type, record.registry_id, record.registry_court))
                 continue
             elif len(search.result) == 1:
+                search_request_successful += 1
                 result = search.result[0]
             else:
-                print("Too many results")
+                print("Too many results for name {} with identifier {} {} at court {}"
+                      .format(record.name, record.registry_type, record.registry_id, record.registry_court))
                 continue
 
             information = LegalEntityInformationFetcher(session, result.index)
             information.fetch()
 
             if information.result is not None:
+                print("Found entity information for {}".format(information.result.name))
                 information_writer.write(information.result)
                 balance_writer.write(information.result)
+
+            if max_search_requests <= search_request_counter:
+                break
+
+    print("{} out of {} search requests were successful ({:.2f} % success rate)"
+          .format(search_request_successful, search_request_counter,
+                  search_request_successful * 100 / search_request_counter))
 
 
 if __name__ == "__main__":
