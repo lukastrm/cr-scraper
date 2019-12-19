@@ -8,7 +8,8 @@ Every distribution, modification, performing and every other type of usage is st
 explicitly allowed by the package license agreement, service contract or other legal regulations.
 """
 import csv
-from comreg.search import LegalEntityInformation
+
+from comreg.entity import LegalEntityInformation, ShareHolderLists
 from comreg.struct import SearchInputRecord
 
 ENCODING = "utf-8"
@@ -81,18 +82,44 @@ class LegalEntityInformationFileWriter:
 class LegalEntityBalanceDatesFileWriter:
 
     def __init__(self, file: str):
-        self.file = open(file, "w", encoding=ENCODING, newline="")
-        self.writer = csv.writer(self.file, delimiter=";")
+        self.__file = open(file, "w", encoding=ENCODING, newline="")
+        self.__writer = csv.writer(self.__file, delimiter=";")
 
     def __enter__(self):
-        self.writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_BALANCE])
+        self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_BALANCE])
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.file.close()
+        self.__file.close()
 
     def write(self, entity: LegalEntityInformation):
         if entity.balance:
             for date in entity.balance:
-                self.writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
-                                      date])
+                self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
+                                        date])
+
+
+_COL_LIST_INDEX = "list_index"
+_COL_LIST_DATE = "list_date"
+
+
+class ShareHolderListsFileWriter:
+
+    def __init__(self, file: str):
+        self.__file = open(file, "w", encoding=ENCODING, newline="")
+        self.__writer = csv.writer(self.__file)
+
+    def __enter__(self):
+        self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
+                                _COL_LIST_INDEX, _COL_LIST_DATE])
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.__file.close()
+
+    def write(self, lists: ShareHolderLists):
+        entity = lists.entity
+
+        for i, date in enumerate(lists.dates):
+            self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
+                                    entity.structure, i, date])

@@ -9,10 +9,8 @@ explicitly allowed by the package license agreement, service contract or other l
 """
 from html.parser import HTMLParser
 import requests as rq
-import re
 
 from comreg.session import Session
-from comreg.struct import LegalEntityInformation
 
 DEFAULT_SEARCH_URL = "https://www.handelsregister.de/rp_web/search.do"
 DEFAULT_ENTITY_INFORMATION_URL = "https://www.handelsregister.de/rp_web/charge-info.do"
@@ -29,7 +27,7 @@ PARAM_KEYWORD_OPTIONS = "schlagwortOptionen"
 PARAM_SEARCH_TYPE = "suchTyp"
 
 
-class CRSearch:
+class SearchRequest:
     """ This class performs a single search request with given registry parameters.
     """
 
@@ -70,12 +68,12 @@ class CRSearch:
         return result.text
 
     def __parse(self, result):
-        p = CRSearchResultParser()
+        p = SearchResultParser()
         p.feed(result)
         self.result = p.result
 
 
-class CRSearchResultParser(HTMLParser):
+class SearchResultParser(HTMLParser):
 
     def __init__(self):
         super().__init__()
@@ -99,20 +97,20 @@ class CRSearchResultParser(HTMLParser):
 
     def handle_data(self, data):
         if self.name_flag:
-            self.result.append(CRSearchResultEntry(self.index, data))
+            self.result.append(SearchResultEntry(self.index, data))
 
     def handle_endtag(self, tag):
         self.name_flag = False
 
 
-class CRSearchResultEntry:
+class SearchResultEntry:
 
     def __init__(self, index, name):
         self.index = index
         self.name = name
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
-    def __str__(self):
-        return "{}: {}".format(self.index, self.name)
+    def __str__(self) -> str:
+        return str(self.__dict__)

@@ -11,9 +11,9 @@ import sys
 import os.path
 
 from comreg.court import CourtListFetcher
+from comreg.entity import LegalEntityInformationFetcher
 from comreg.file import SearchInputDataFileReader, LegalEntityInformationFileWriter, LegalEntityBalanceDatesFileWriter
-from comreg.search import CRSearch, PARAM_REGISTER_TYPE, PARAM_REGISTER_COURT, PARAM_REGISTER_ID, PARAM_KEYWORDS, \
-    CRSearchResultEntry, CRLegalEntityInformationLookUp
+from comreg.search import SearchRequest, PARAM_REGISTER_TYPE, PARAM_REGISTER_COURT, PARAM_REGISTER_ID, PARAM_KEYWORDS
 from comreg.session import Session
 
 
@@ -57,7 +57,7 @@ def main():
             LegalEntityInformationFileWriter("information.csv") as information_writer, \
             LegalEntityBalanceDatesFileWriter("balances.csv") as balance_writer:
         for record in reader:
-            search = CRSearch(session)
+            search = SearchRequest(session)
             search.set_param(PARAM_REGISTER_TYPE, record.registry_type)
             search.set_param(PARAM_REGISTER_ID, record.registry_id)
             search.params[PARAM_KEYWORDS] = record.name
@@ -87,7 +87,7 @@ def main():
                 print("Too many results")
                 continue
 
-            information = CRLegalEntityInformationLookUp(session, result.index)
+            information = LegalEntityInformationFetcher(session, result.index)
             information.fetch()
 
             if information.result is not None:

@@ -7,7 +7,7 @@ Technical University of Berlin.
 Every distribution, modification, performing and every other type of usage is strictly prohibited if not
 explicitly allowed by the package license agreement, service contract or other legal regulations.
 """
-import requests as rq
+import requests
 
 
 class Session:
@@ -17,7 +17,7 @@ class Session:
 
     def run(self):
         try:
-            result = rq.get("https://www.handelsregister.de/rp_web/welcome.do", timeout=(5, 10))
+            result = requests.get("https://www.handelsregister.de/rp_web/welcome.do", timeout=(5, 10))
             self.identifier = result.cookies["JSESSIONID"]
         except TimeoutError:
             print("Timeout")
