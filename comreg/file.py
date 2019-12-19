@@ -8,6 +8,7 @@ Every distribution, modification, performing and every other type of usage is st
 explicitly allowed by the package license agreement, service contract or other legal regulations.
 """
 import csv
+import re
 
 from comreg.entity import LegalEntityInformation, ShareHolderLists
 from comreg.struct import SearchInputRecord
@@ -39,7 +40,22 @@ class SearchInputDataFileReader:
             self.header = False
 
         raw: str = next(self.reader)
-        return SearchInputRecord(*raw)
+        name: str = raw[0]
+        registry_type = raw[3]
+
+        reg_id = re.match(r"^\D*(\d+)?\D*$", raw[2])
+
+        if reg_id is not None:
+            registry_id = reg_id.group(1)
+
+            if registry_id is not None:
+                registry_id = int(registry_id)
+
+        registry_court = raw[5]
+
+        print([name, registry_type, registry_id, registry_court])
+
+        return SearchInputRecord(name, registry_type, registry_id, registry_court)
 
 
 _COL_NAME = "name"
@@ -61,7 +77,7 @@ class LegalEntityInformationFileWriter:
 
     def __init__(self, file: str):
         self.file = open(file, "w", encoding=ENCODING, newline="")
-        self.writer = csv.writer(self.file, delimiter=";")
+        self.writer = csv.writer(self.file)
 
     def __enter__(self):
         self.writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
@@ -83,7 +99,7 @@ class LegalEntityBalanceDatesFileWriter:
 
     def __init__(self, file: str):
         self.__file = open(file, "w", encoding=ENCODING, newline="")
-        self.__writer = csv.writer(self.__file, delimiter=";")
+        self.__writer = csv.writer(self.__file)
 
     def __enter__(self):
         self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_BALANCE])
