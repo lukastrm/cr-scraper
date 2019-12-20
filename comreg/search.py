@@ -23,6 +23,11 @@ PARAM_REGISTER_ID = "registerNummer"
 PARAM_KEYWORDS = "schlagwoerter"
 PARAM_KEYWORD_OPTIONS = "schlagwortOptionen"
 PARAM_SEARCH_TYPE = "suchTyp"
+PARAM_SEARCH_OPTION_DELETED = "suchOptionenGeloescht"
+
+KEYWORD_OPTION_ALL = 1
+KEYWORD_OPTION_AT_LEAST_ONE = 2
+KEYWORD_OPTION_EQUAL_NAME = 3
 
 
 class SearchParameters:
@@ -48,18 +53,19 @@ class SearchRequest:
         if url is None:
             raise ValueError("url must not be None")
 
-        self.__session = session
+        self.session = session
         self.__url = url
         self.__parameters = parameters if parameters is not None else {
             PARAM_BUTTON_SEARCH: "Suchen",
             PARAM_RESULTS_PER_PAGE: 10,
-            PARAM_ESTABLISHMENT: None,
-            PARAM_REGISTER_TYPE: None,
-            PARAM_REGISTER_COURT: None,
-            PARAM_REGISTER_ID: None,
-            PARAM_KEYWORDS: None,
-            PARAM_KEYWORD_OPTIONS: 2,
-            PARAM_SEARCH_TYPE: None
+            PARAM_ESTABLISHMENT: "",
+            PARAM_REGISTER_TYPE: "",
+            PARAM_REGISTER_COURT: "",
+            PARAM_REGISTER_ID: "",
+            PARAM_KEYWORDS: "",
+            PARAM_KEYWORD_OPTIONS: KEYWORD_OPTION_AT_LEAST_ONE,
+            PARAM_SEARCH_TYPE: 'n',
+            PARAM_SEARCH_OPTION_DELETED: False
         }
 
         self.result = None
@@ -80,9 +86,15 @@ class SearchRequest:
         return self.result
 
     def __request(self):
-        result = rq.post(self.__url + ";jsessionid=" + self.__session.identifier, data=self.__parameters,
-                         cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
+        result = rq.post(self.__url + ";jsessionid=" + self.session.identifier, data=self.__parameters,
+                         cookies={"JSESSIONID": self.session.identifier, "language": "de"})
         return result.text
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return str(self.__dict__)
 
 
 class SearchResultParser(HTMLParser):

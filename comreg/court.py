@@ -68,7 +68,7 @@ class CourtList:
 
         return None if name is None else self.name_map.get(name)
 
-    def get_closest_from_name(self, name: str) -> Tuple[Court, float]:
+    def get_closest_from_name(self, name: str) -> Court:
         """
         Returns the matching `Court` object based on a given registry court name. This method selects the object with
         the most similar name to the given string. Returns `None` if the list is empty.
@@ -81,7 +81,11 @@ class CourtList:
         court: Optional[Court] = None
 
         if name is None:
-            return court, ratio
+            return court
+
+        for n, c in self.name_map.items():
+            if re.match(r".*\({}\).*".format(name), n):
+                return c
 
         for n, c in self.name_map.items():
             r = SequenceMatcher(None, name, n).ratio()
@@ -90,7 +94,7 @@ class CourtList:
                 court = c
                 ratio = r
 
-        return court, ratio
+        return court
 
     def get_from_identifier(self, identifier: str) -> Court:
         """
@@ -101,6 +105,9 @@ class CourtList:
         :return: the matching `Court` object or `None` if no match was found
         """
         return self.identifier_map.get(identifier)
+
+    def __len__(self):
+        return len(self.name_map)
 
     def __repr__(self) -> str:
         return str(self)
