@@ -10,7 +10,7 @@ from comreg.documents import ShareHolderListsFetcher
 from comreg.court import CourtListFetcher
 
 session = Session()
-session.run()
+session.initialize()
 # session.identifier = "75E01F9391ACB741C19FE39D94775439.tc05n01"
 
 sleep(3)

@@ -68,7 +68,7 @@ def main():
 
     logger.info("Starting session")
     session = Session()
-    session.run()
+    session.initialize()
 
     if not session:
         logger.error("Failed to initialize session")
