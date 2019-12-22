@@ -24,6 +24,7 @@ SYS_ARG_NAME_DELAY = "delay"
 SYS_ARG_NAME_COOLDOWN = "cooldown"
 
 
+_OPTION_HELP = "help"
 _OPTION_LINES = "lines"
 _OPTION_DELAY = "delay"
 _OPTION_REQUEST_LIMIT = "request-limit"
@@ -33,20 +34,22 @@ _OPTION_LIMIT_INTERVAL = "limit-interval"
 class RuntimeOptions:
 
     def __init__(self):
+        self.help: bool = False
         self.rows: Tuple[int, int] = None
         self.delay: int = 10
         self.request_limit = 60
         self.limit_interval: int = 60 * 60
 
     def set_option(self, option: str, raw_value: Optional[str]) -> None:
-        logger = logging.getLogger("default")
         invalid = False
 
         if not option:
-            logger.warning("Ignoring empty option")
+            print("Ignoring empty option")
             return
 
-        if option == _OPTION_LINES:
+        if option == _OPTION_HELP:
+            self.help = True
+        elif option == _OPTION_LINES:
             match = re.match(r"^(\d*),(\d*)$", raw_value)
             raw_lower = match.group(1)
             raw_upper = match.group(2)
@@ -59,7 +62,6 @@ class RuntimeOptions:
                     lower = upper
 
                 self.rows = (lower, upper)
-                logger.info("Restricting analysis to input rows {} to {}".format(lower, upper))
             else:
                 invalid = True
         elif option == _OPTION_DELAY:
@@ -68,7 +70,6 @@ class RuntimeOptions:
 
                 if delay > 0:
                     self.delay = delay
-                    logger.info("Set delay to {} seconds".format(self.request_limit))
                     return
 
             invalid = True
@@ -78,7 +79,6 @@ class RuntimeOptions:
 
                 if limit > 0:
                     self.request_limit = int(raw_value)
-                    logger.info("Set limit to {} requests".format(self.request_limit))
                     return
 
             invalid = True
@@ -88,42 +88,24 @@ class RuntimeOptions:
 
                 if interval > 0:
                     self.limit_interval = interval
-                    logger.info("Set limit interval to {} seconds".format(self.limit_interval))
                     return
 
             invalid = True
         else:
-            logger.warning("Ignoring value for unknown option {}".format(option))
+            print("Ignoring value for unknown option {}".format(option))
 
         if invalid:
-            logger.warning("Invalid value {} for option --{}".format(raw_value, option))
+            print("Invalid value {} for option --{}".format(raw_value, option))
 
 
 def main():
-    log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    logger = logging.getLogger("default")
-
-    file_handler = logging.FileHandler("protocol.log")
-    file_handler.setFormatter(log_formatter)
-    logger.addHandler(file_handler)
-
-    error_file_handler = logging.FileHandler("error.log")
-    error_file_handler.setFormatter(log_formatter)
-    error_file_handler.setLevel(logging.WARNING)
-    logger.addHandler(error_file_handler)
-
-    console_handler = logging.StreamHandler(stream=sys.stdout)
-    console_handler.setFormatter(log_formatter)
-    logger.addHandler(console_handler)
-    logger.setLevel(logging.INFO)
-
     args = sys.argv
     arg_len = len(args)
 
     if arg_len == 0:
         raise ValueError
     if arg_len == 1:
-        print("Usage: crreader <File>([, <File>]) ([<Option> <Argument>])")
+        print("Usage: crreader <File>([, <File>]) ([<Option> <Value>])")
         return
 
     files = []
@@ -161,6 +143,43 @@ def main():
 
     if option is not None:
         options.set_option(option, None)
+
+    if options.help:
+        print("Usage: crreader <File>([, <File>]) ([<Option> <Value>])")
+        return
+
+    log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    logger = logging.getLogger("default")
+
+    file_handler = logging.FileHandler("protocol.log")
+    file_handler.setFormatter(log_formatter)
+    logger.addHandler(file_handler)
+
+    error_file_handler = logging.FileHandler("error.log")
+    error_file_handler.setFormatter(log_formatter)
+    error_file_handler.setLevel(logging.WARNING)
+    logger.addHandler(error_file_handler)
+
+    console_handler = logging.StreamHandler(stream=sys.stdout)
+    console_handler.setFormatter(log_formatter)
+    logger.addHandler(console_handler)
+    logger.setLevel(logging.INFO)
+
+    # Log session options
+    if options.rows is not None:
+        lower = options.rows[0]
+        upper = options.rows[1]
+        logger.info("Restricting analysis to input rows {} to {}".format(lower if lower >= 0 else "LOWEST", upper if upper >= 0 else "HIGHEST"))
+
+    if options.delay > 0:
+        logger.info("Request delay: {} seconds".format(options.delay))
+    else:
+        logger.info("No request delay set")
+
+    if options.request_limit > 0 and options.limit_interval > 0:
+        logger.info("Request limit: {} per {} seconds".format(options.request_limit, options.limit_interval))
+    else:
+        logger.info("No request limit set")
 
     logger.info("Starting session")
     session = Session(delay=options.delay, request_limit=options.request_limit, limit_interval=options.limit_interval)
