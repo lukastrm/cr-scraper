@@ -7,10 +7,11 @@ Technical University of Berlin.
 Every distribution, modification, performing and every other type of usage is strictly prohibited if not
 explicitly allowed by the package license agreement, service contract or other legal regulations.
 """
+import re
 import sys
 import logging
 import os.path
-from time import sleep
+from typing import Tuple, Optional
 
 from comreg.court import CourtListFetcher
 from comreg.entity import LegalEntityInformationFetcher
@@ -23,34 +24,84 @@ SYS_ARG_NAME_DELAY = "delay"
 SYS_ARG_NAME_COOLDOWN = "cooldown"
 
 
-def main():
-    args = sys.argv
-    arg_len = len(args)
+_OPTION_LINES = "lines"
+_OPTION_DELAY = "delay"
+_OPTION_REQUEST_LIMIT = "request-limit"
+_OPTION_LIMIT_INTERVAL = "limit-interval"
 
-    if arg_len == 0:
-        raise ValueError
-    if arg_len == 1:
-        print("Usage: crreader <File>([, <File>]) ([<Flag> <Argument>])")
-        return
 
-    files = []
-    flags = False
+class RuntimeOptions:
 
-    for arg in args[1:]:
-        if not flags and arg.startswith("--"):
-            flags = True
+    def __init__(self):
+        self.rows: Tuple[int, int] = None
+        self.delay: int = 10
+        self.request_limit = 60
+        self.limit_interval: int = 60 * 60
 
-        if flags:
-            pass
-        else:
-            if os.path.exists(arg):
-                files.append(arg)
+    def set_option(self, option: str, raw_value: Optional[str]) -> None:
+        logger = logging.getLogger("default")
+        invalid = False
+
+        if not option:
+            logger.warning("Ignoring empty option")
+            return
+
+        if option == _OPTION_LINES:
+            match = re.match(r"^(\d*),(\d*)$", raw_value)
+            raw_lower = match.group(1)
+            raw_upper = match.group(2)
+
+            lower = int(raw_lower) if raw_lower else -1
+            upper = int(raw_upper) if raw_upper else -1
+
+            if match:
+                if lower >= 0 and 0 <= upper < lower:
+                    lower = upper
+
+                self.rows = (lower, upper)
+                logger.info("Restricting analysis to input rows {} to {}".format(lower, upper))
             else:
-                print("File does not exist or is not accessible: {}".format(arg))
-                return
+                invalid = True
+        elif option == _OPTION_DELAY:
+            if re.match(r"\d+", raw_value):
+                delay = int(raw_value)
 
+                if delay > 0:
+                    self.delay = delay
+                    logger.info("Set delay to {} seconds".format(self.request_limit))
+                    return
+
+            invalid = True
+        elif option == _OPTION_REQUEST_LIMIT:
+            if re.match(r"\d+", raw_value):
+                limit = int(raw_value)
+
+                if limit > 0:
+                    self.request_limit = int(raw_value)
+                    logger.info("Set limit to {} requests".format(self.request_limit))
+                    return
+
+            invalid = True
+        elif option == _OPTION_LIMIT_INTERVAL:
+            if re.match(r"\d+", raw_value):
+                interval = int(raw_value)
+
+                if interval > 0:
+                    self.limit_interval = interval
+                    logger.info("Set limit interval to {} seconds".format(self.limit_interval))
+                    return
+
+            invalid = True
+        else:
+            logger.warning("Ignoring value for unknown option {}".format(option))
+
+        if invalid:
+            logger.warning("Invalid value {} for option --{}".format(raw_value, option))
+
+
+def main():
     log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    logger = logging.getLogger()
+    logger = logging.getLogger("default")
 
     file_handler = logging.FileHandler("protocol.log")
     file_handler.setFormatter(log_formatter)
@@ -66,8 +117,53 @@ def main():
     logger.addHandler(console_handler)
     logger.setLevel(logging.INFO)
 
+    args = sys.argv
+    arg_len = len(args)
+
+    if arg_len == 0:
+        raise ValueError
+    if arg_len == 1:
+        print("Usage: crreader <File>([, <File>]) ([<Option> <Argument>])")
+        return
+
+    files = []
+    read_options = False
+    options = RuntimeOptions()
+    option = None
+
+    for arg in args[1:]:
+        if arg.startswith("--"):
+            arg = arg[2:]
+
+            if not read_options:
+                read_options = True
+
+            if option is not None:
+                options.set_option(option, None)
+                option = arg
+            else:
+                option = arg
+
+            continue
+
+        if read_options:
+            if option is None:
+                print("No option for value {}".format(arg))
+            else:
+                options.set_option(option, arg)
+                option = None
+        else:
+            if os.path.exists(arg):
+                files.append(arg)
+            else:
+                print("File does not exist or is not accessible: {}".format(arg))
+                return
+
+    if option is not None:
+        options.set_option(option, None)
+
     logger.info("Starting session")
-    session = Session()
+    session = Session(delay=options.delay, request_limit=options.request_limit, limit_interval=options.limit_interval)
     session.initialize()
 
     if not session:
@@ -93,6 +189,11 @@ def main():
             LegalEntityInformationFileWriter("information.csv") as information_writer, \
             LegalEntityBalanceDatesFileWriter("balances.csv") as balance_writer:
         for record in reader:
+            if session.is_limit_reached():
+                logger.info("Reached request limit, delaying request")
+
+            session.make_limited_request()
+
             search = SearchRequest(session)
             search.set_param(PARAM_KEYWORDS, record.name)
             search.set_param(PARAM_REGISTER_TYPE, record.registry_type)
@@ -109,9 +210,11 @@ def main():
                     if court is None:
                         logger.warning("No court identifier found for {}".format(record.registry_court))
                     else:
-                        logger.warning("Closest match for {} is court {} with identifier {}".format(record.registry_court, court.name, court.identifier))
+                        logger.warning("Closest match for {} is court {} with identifier {}"
+                                       .format(record.registry_court, court.name, court.identifier))
 
-            search.set_param(PARAM_REGISTER_COURT, court.identifier)
+                search.set_param(PARAM_REGISTER_COURT, court.identifier)
+
             search.run()
             search_request_counter += 1
 
@@ -145,7 +248,6 @@ def main():
 
             search_request_successful += 1
             result = search.result[0]
-            sleep(3)
 
             information = LegalEntityInformationFetcher(session, result)
             information.fetch()
@@ -157,8 +259,6 @@ def main():
 
             if max_search_requests <= search_request_counter:
                 break
-
-            sleep(5)
 
     logger.info("{} out of {} search requests were successful ({:.2f} % success rate)".
                 format(search_request_successful, search_request_counter,

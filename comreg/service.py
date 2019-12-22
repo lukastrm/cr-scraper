@@ -7,26 +7,27 @@ Technical University of Berlin.
 Every distribution, modification, performing and every other type of usage is strictly prohibited if not
 explicitly allowed by the package license agreement, service contract or other legal regulations.
 """
-import time
 import requests
-from typing import Tuple
+from time import sleep, time
 
 DEFAULT_SEARCH_URL = "https://www.handelsregister.de/rp_web/search.do"
 DEFAULT_DOCUMENT_URL = "https://www.handelsregister.de/rp_web/document.do"
 
 
-def now():
-    return int(round(time.time() * 1000))
-
-
 class Session:
 
-    def __init__(self, identifier: str = None, delay: int = 10, cooldown: Tuple[int, int] = (60, 60 * 50)):
+    def __init__(self, identifier: str = None, delay: int = -1, request_limit: int = -1, limit_interval: int = -1):
+        if request_limit > 0:
+            if limit_interval < 0:
+                raise ValueError
+
         self.identifier: str = identifier
         self.delay: int = delay
-        self.cooldown: Tuple[int, int] = cooldown
-        self.last_fetch = -1
-        self.last_request = -1
+        self.request_limit: int = request_limit
+        self.limit_interval = limit_interval
+        self.delay_start = -1
+        self.limit_start = -1
+        self.limited_requests = 0
 
     def initialize(self) -> None:
         try:
@@ -39,11 +40,43 @@ class Session:
     def invalidate(self) -> None:
         self.identifier = None
 
-    def wait_for_delay(self) -> None:
-        if self.delay > 0:
-            cur_time = now()
+    def is_limit_reached(self) -> bool:
+        if self.request_limit <= 0:
+            return False
 
-            remaining = self.delay - cur_time + self.last_request
+        current = time()
+        passed = current - self.limit_start
+
+        if passed < self.limit_interval:
+            if self.limited_requests >= self.request_limit:
+                return True
+        else:
+            self.limited_requests = 0
+
+        return False
+
+    def make_limited_request(self) -> None:
+        if self.request_limit <= 0:
+            current = time()
+
+            if self.limited_requests == 0:
+                self.limit_start = current
+
+            remaining = self.limit_interval - current + self.limit_start
 
             if remaining > 0:
-                time.sleep(remaining)
+                if self.limited_requests >= self.request_limit:
+                    sleep(remaining)
+                    self.limited_requests = 1
+                    self.limit_start = time()
+            else:
+                self.limited_requests += 1
+
+        if self.delay > 0:
+            current = time()
+            remaining = self.delay - current + self.delay_start
+
+            if remaining > 0:
+                sleep(remaining)
+
+            self.delay_start = time()
