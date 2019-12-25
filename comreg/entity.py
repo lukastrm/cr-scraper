@@ -43,19 +43,6 @@ class LegalEntityInformation:
         return str(self.__dict__)
 
 
-class ShareHolderLists:
-
-    def __init__(self, entity: LegalEntityInformation, dates: Optional[List[str]]):
-        self.entity = entity
-        self.dates = [] if dates is None else dates
-
-    def __repr__(self) -> str:
-        return str(self)
-
-    def __str__(self) -> str:
-        return str(self.__dict__)
-
-
 class LegalEntityInformationFetcher:
 
     def __init__(self, session, search_result_entry: SearchResultEntry, url=DEFAULT_DOCUMENT_URL):

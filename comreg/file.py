@@ -11,7 +11,8 @@ import csv
 import re
 from typing import Optional
 
-from comreg.entity import LegalEntityInformation, ShareHolderLists
+from comreg.documents import ShareholderLists
+from comreg.entity import LegalEntityInformation
 
 ENCODING = "utf-8"
 
@@ -148,7 +149,10 @@ class ShareHolderListsFileWriter:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.__file.close()
 
-    def write(self, lists: ShareHolderLists):
+    def write(self, lists: ShareholderLists):
+        if lists is None:
+            return
+
         entity = lists.entity
 
         for i, date in enumerate(lists.dates):

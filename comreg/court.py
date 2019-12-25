@@ -10,7 +10,7 @@ explicitly allowed by the package license agreement, service contract or other l
 import re
 import requests
 from html.parser import HTMLParser
-from typing import List, Tuple, Optional, Dict
+from typing import List, Optional, Dict
 from difflib import SequenceMatcher
 
 from comreg.service import Session

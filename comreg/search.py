@@ -8,6 +8,8 @@ Every distribution, modification, performing and every other type of usage is st
 explicitly allowed by the package license agreement, service contract or other legal regulations.
 """
 from html.parser import HTMLParser
+from typing import Dict, Optional
+
 import requests as rq
 
 from comreg.service import Session
@@ -97,41 +99,95 @@ class SearchRequest:
         return str(self.__dict__)
 
 
+_STATE_VOID = 0
+_STATE_ERROR = 1
+_STATE_AWAIT_ENTRY = 2
+_STATE_ENTITY_NAME = 3
+_STATE_RECORD_CONTENTS = 4
+_STATE_RECORD_CONTENT = 5
+_STATE_ENTRY = 6
+
+
 class SearchResultParser(HTMLParser):
 
     def __init__(self):
         super().__init__()
+        self.state = _STATE_VOID
         self.result = []
-        self.index = -1
-        self.name_flag = False
+        self.entry: Optional[SearchResultEntry] = None
 
     def error(self, message):
         pass
 
     def handle_starttag(self, tag, attrs):
-        if tag == "a":
-            for attr_name, attr_value in attrs:
-                if attr_name == "name" and attr_value.startswith("Eintrag_"):
-                    self.index = int(attr_value[len("Eintrag_"):])
-
         if tag == "td":
-            for attr_name, attr_value in attrs:
-                if attr_name == "class" and attr_value == "RegPortErg_FirmaKopf":
-                    self.name_flag = True
+            if self.state == _STATE_VOID:
+                for attr_name, attr_value in attrs:
+                    if attr_name == "class" and attr_value == "RegPortErg_AZ":
+                        self.state = _STATE_AWAIT_ENTRY
+                        self.entry = SearchResultEntry()
+            elif self.state == _STATE_AWAIT_ENTRY:
+                for attr_name, attr_value in attrs:
+                    if attr_name == "class":
+                        if attr_value == "RegPortErg_FirmaKopf":
+                            self.state = _STATE_ENTITY_NAME
+                        elif attr_value == "RegPortErg_RandRechts":
+                            self.state = _STATE_RECORD_CONTENTS
+
+        elif tag == "a":
+            if self.state == _STATE_AWAIT_ENTRY:
+                for attr_name, attr_value in attrs:
+                    if attr_name == "name" and attr_value.startswith("Eintrag_"):
+                        self.entry.index = int(attr_value[len("Eintrag_"):])
+            elif self.state == _STATE_RECORD_CONTENTS:
+                self.state = _STATE_RECORD_CONTENT
 
     def handle_data(self, data):
-        if self.name_flag:
-            self.result.append(SearchResultEntry(self.index, data))
+        if self.state == _STATE_ENTITY_NAME:
+            self.entry.name = data.strip()
+        elif self.state == _STATE_RECORD_CONTENT:
+            data = data.strip()
+
+            if self.entry.contents[data] is not None:
+                self.entry.contents[data] = True
 
     def handle_endtag(self, tag):
-        self.name_flag = False
+        if tag == "td":
+            if self.state == _STATE_ENTITY_NAME:
+                self.state = _STATE_AWAIT_ENTRY
+            elif self.state == _STATE_RECORD_CONTENTS:
+                self.state = _STATE_ENTRY
+        elif tag == "tr":
+            if self.state == _STATE_ENTRY:
+                self.state = _STATE_VOID
+                self.result.append(self.entry)
+                self.entry = None
+        elif tag == "a":
+            if self.state == _STATE_RECORD_CONTENT:
+                self.state = _STATE_RECORD_CONTENTS
+
+
+RECORD_CONTENT_LEGAL_ENTITY_INFORMATION = "UT"
+RECORD_CONTENT_DOCUMENTS = "DK"
 
 
 class SearchResultEntry:
 
-    def __init__(self, index, name):
-        self.index = index
-        self.name = name
+    def __init__(self, index: int = -1, name: str = None):
+        self.index: int = index
+        self.name: str = name
+        self.contents: Dict[str, bool] = {
+            "AD": False,
+            "CD": False,
+            "HD": False,
+            RECORD_CONTENT_DOCUMENTS: False,
+            RECORD_CONTENT_LEGAL_ENTITY_INFORMATION: False,
+            "VÖ": False,
+            "SI": False
+        }
+
+    def record_has_content(self, content: str) -> bool:
+        return self.contents[content]
 
     def __repr__(self) -> str:
         return str(self)

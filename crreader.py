@@ -14,10 +14,13 @@ import os.path
 from typing import Tuple, Optional
 
 from comreg.court import CourtListFetcher
+from comreg.documents import ShareholderListsFetcher, ShareholderLists
 from comreg.entity import LegalEntityInformationFetcher
-from comreg.file import SearchInputDataFileReader, LegalEntityInformationFileWriter, LegalEntityBalanceDatesFileWriter
+from comreg.file import SearchInputDataFileReader, LegalEntityInformationFileWriter, \
+    LegalEntityBalanceDatesFileWriter, ShareHolderListsFileWriter
 from comreg.search import SearchRequest, PARAM_REGISTER_TYPE, PARAM_REGISTER_COURT, PARAM_REGISTER_ID, PARAM_KEYWORDS, \
-    PARAM_KEYWORD_OPTIONS, KEYWORD_OPTION_ALL, PARAM_SEARCH_OPTION_DELETED, KEYWORD_OPTION_EQUAL_NAME
+    PARAM_KEYWORD_OPTIONS, KEYWORD_OPTION_ALL, PARAM_SEARCH_OPTION_DELETED, KEYWORD_OPTION_EQUAL_NAME, \
+    SearchResultEntry, RECORD_CONTENT_DOCUMENTS, RECORD_CONTENT_LEGAL_ENTITY_INFORMATION
 from comreg.service import Session
 
 SYS_ARG_NAME_DELAY = "delay"
@@ -25,10 +28,11 @@ SYS_ARG_NAME_COOLDOWN = "cooldown"
 
 
 _OPTION_HELP = "help"
-_OPTION_LINES = "lines"
+_OPTION_ROWS = "rows"
 _OPTION_DELAY = "delay"
 _OPTION_REQUEST_LIMIT = "request-limit"
 _OPTION_LIMIT_INTERVAL = "limit-interval"
+_OPTION_TARGET_PATH = "target"
 
 
 class RuntimeOptions:
@@ -39,6 +43,7 @@ class RuntimeOptions:
         self.delay: int = 10
         self.request_limit = 60
         self.limit_interval: int = 60 * 60
+        self.target_path = None
 
     def set_option(self, option: str, raw_value: Optional[str]) -> None:
         invalid = False
@@ -49,15 +54,16 @@ class RuntimeOptions:
 
         if option == _OPTION_HELP:
             self.help = True
-        elif option == _OPTION_LINES:
-            match = re.match(r"^(\d*),(\d*)$", raw_value)
-            raw_lower = match.group(1)
-            raw_upper = match.group(2)
-
-            lower = int(raw_lower) if raw_lower else -1
-            upper = int(raw_upper) if raw_upper else -1
+        elif option == _OPTION_ROWS:
+            match = re.match(r"^(-1|\d*),(-1|\d*)$", raw_value)
 
             if match:
+                raw_lower = match.group(1)
+                raw_upper = match.group(2)
+
+                lower = int(raw_lower) if raw_lower else -1
+                upper = int(raw_upper) if raw_upper else -1
+
                 if lower >= 0 and 0 <= upper < lower:
                     lower = upper
 
@@ -91,6 +97,8 @@ class RuntimeOptions:
                     return
 
             invalid = True
+        elif option == _OPTION_TARGET_PATH:
+            self.target_path = raw_value
         else:
             print("Ignoring value for unknown option {}".format(option))
 
@@ -151,11 +159,11 @@ def main():
     log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     logger = logging.getLogger("default")
 
-    file_handler = logging.FileHandler("protocol.log")
+    file_handler = logging.FileHandler("protocol.log", "w")
     file_handler.setFormatter(log_formatter)
     logger.addHandler(file_handler)
 
-    error_file_handler = logging.FileHandler("error.log")
+    error_file_handler = logging.FileHandler("error.log", "w")
     error_file_handler.setFormatter(log_formatter)
     error_file_handler.setLevel(logging.WARNING)
     logger.addHandler(error_file_handler)
@@ -169,7 +177,8 @@ def main():
     if options.rows is not None:
         lower = options.rows[0]
         upper = options.rows[1]
-        logger.info("Restricting analysis to input rows {} to {}".format(lower if lower >= 0 else "LOWEST", upper if upper >= 0 else "HIGHEST"))
+        logger.info("Restricting analysis to input rows {} to {}".format(lower if lower >= 0 else "LOWEST",
+                                                                         upper if upper >= 0 else "HIGHEST"))
 
     if options.delay > 0:
         logger.info("Request delay: {} seconds".format(options.delay))
@@ -181,33 +190,52 @@ def main():
     else:
         logger.info("No request limit set")
 
+    # Initialize web service session
     logger.info("Starting session")
     session = Session(delay=options.delay, request_limit=options.request_limit, limit_interval=options.limit_interval)
     session.initialize()
 
     if not session:
         logger.error("Failed to initialize session")
-        return
+        sys.exit(1)
 
     logger.info("Initialized session " + session.identifier)
 
+    # Fetch court list to get the correct identifier mapping
     logger.info("Fetching court list")
     court_list_fetcher = CourtListFetcher(session)
     court_list = court_list_fetcher.run()
 
     if not court_list:
         logger.error("Failed to fetch court list")
+        sys.exit(1)
 
     logger.info("Fetched information for {} registry courts".format(len(court_list)))
 
-    max_search_requests = 100
     search_request_counter: int = 0
     search_request_successful: int = 0
 
+    # Set the target directory path for output files
+    path = ""
+
+    if options.target_path:
+        if not os.path.isdir(options.target_path):
+            logger.error("Target path must be a directory: {}".format(options.target_path))
+            sys.exit(1)
+
+        path += options.target_path + os.path.sep
+
     with SearchInputDataFileReader(files[0]) as reader, \
-            LegalEntityInformationFileWriter("information.csv") as information_writer, \
-            LegalEntityBalanceDatesFileWriter("balances.csv") as balance_writer:
-        for record in reader:
+            LegalEntityInformationFileWriter(path + "entity-information.csv") as entity_information_writer, \
+            LegalEntityBalanceDatesFileWriter(path + "balance-dates.csv") as balance_dates_writer, \
+            ShareHolderListsFileWriter(path + "shareholder-lists.csv") as shareholder_lists_writer:
+        for i, record in enumerate(reader):
+            if options.rows is not None:
+                if i < options.rows[0]:
+                    continue
+                elif 0 <= options.rows[1] <= i:
+                    break
+
             if session.is_limit_reached():
                 logger.info("Reached request limit, delaying request")
 
@@ -266,18 +294,32 @@ def main():
                 continue
 
             search_request_successful += 1
-            result = search.result[0]
+            result: SearchResultEntry = search.result[0]
 
-            information = LegalEntityInformationFetcher(session, result)
-            information.fetch()
+            # Check if the search result indicates the existence of legal entity information data,
+            # which should always be True
+            if not result.record_has_content(RECORD_CONTENT_LEGAL_ENTITY_INFORMATION):
+                logger.warning("No legal entity information indicator for {}".format(result.name))
+                continue
 
-            if information.result is not None:
-                logger.info("Found entity information for {}".format(information.result.name))
-                information_writer.write(information.result)
-                balance_writer.write(information.result)
+            entity_information_fetcher = LegalEntityInformationFetcher(session, result)
+            entity_information = entity_information_fetcher.fetch()
 
-            if max_search_requests <= search_request_counter:
-                break
+            if entity_information is None:
+                logger.warning("Cannot fetch detailed information for {}".format(result.name))
+                continue
+
+            entity_information_writer.write(entity_information)
+            balance_dates_writer.write(entity_information)
+
+            if result.record_has_content(RECORD_CONTENT_DOCUMENTS):
+                lists_fetcher = ShareholderListsFetcher(session)
+                shareholder_lists: ShareholderLists = lists_fetcher.fetch(result, entity_information)
+
+                if shareholder_lists is None:
+                    logger.warning("Cannot fetch shareholder lists for {}".format(entity_information.name))
+
+                shareholder_lists_writer.write(shareholder_lists)
 
     logger.info("{} out of {} search requests were successful ({:.2f} % success rate)".
                 format(search_request_successful, search_request_counter,
