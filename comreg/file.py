@@ -35,28 +35,31 @@ class SearchInputRecord:
 
 class SearchInputDataFileReader:
 
-    def __init__(self, path: str, header: bool = True):
-        self.path: str = path
-        self.reader = None
-        self.header: bool = header
+    def __init__(self, path: str, header: bool = True, delimiter: str = ","):
+        self.__path: str = path
+        self.__header: bool = header
+        self.__delimiter = delimiter
+
+        self.__file = None
+        self.__reader = None
 
     def __enter__(self):
-        self.file = open(self.path, "r", encoding=ENCODING)
-        self.reader = csv.reader(self.file, delimiter=";")
+        self.__file = open(self.__path, "r", encoding=ENCODING)
+        self.__reader = csv.reader(self.__file, delimiter=self.__delimiter)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.file.close()
+        self.__file.close()
 
     def __iter__(self):
         return self
 
     def __next__(self) -> Optional[SearchInputRecord]:
-        if self.header:
-            next(self.reader)
-            self.header = False
+        if self.__header:
+            next(self.__reader)
+            self.__header = False
 
-        raw: str = next(self.reader)
+        raw: str = next(self.__reader)
 
         if len(raw) < 6:
             return None
@@ -87,11 +90,16 @@ _COL_CITY = "city"
 
 class LegalEntityInformationFileWriter:
 
-    def __init__(self, file: str):
-        self.__file = open(file, "w", encoding=ENCODING, newline="")
-        self.__writer = csv.writer(self.__file)
+    def __init__(self, path: str, delimiter: str = ","):
+        self.__path: str = path
+        self.__delimiter: str = delimiter
+
+        self.__file = None
+        self.__writer = None
 
     def __enter__(self):
+        self.__file = open(self.__path, "w", encoding=ENCODING, newline="")
+        self.__writer = csv.writer(self.__file, delimiter=self.__delimiter)
         self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
                                 _COL_CAPITAL, _COL_CAPITAL_CURRENCY, _COL_ENTRY, _COL_DELETION, _COL_BALANCE,
                                 _COL_ADDRESS, _COL_POST_CODE, _COL_CITY])
@@ -111,11 +119,16 @@ class LegalEntityInformationFileWriter:
 
 class LegalEntityBalanceDatesFileWriter:
 
-    def __init__(self, file: str):
-        self.__file = open(file, "w", encoding=ENCODING, newline="")
-        self.__writer = csv.writer(self.__file)
+    def __init__(self, path: str, delimiter: str = ","):
+        self.__path = path
+        self.__delimiter = delimiter
+
+        self.__file = None
+        self.__writer = None
 
     def __enter__(self):
+        self.__file = open(self.__path, "w", encoding=ENCODING, newline="")
+        self.__writer = csv.writer(self.__file, delimiter=self.__delimiter)
         self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_BALANCE])
         self.__file.flush()
         return self
@@ -137,11 +150,13 @@ _COL_LIST_DATE = "list_date"
 
 class ShareHolderListsFileWriter:
 
-    def __init__(self, file: str):
-        self.__file = open(file, "w", encoding=ENCODING, newline="")
-        self.__writer = csv.writer(self.__file)
+    def __init__(self, path: str, delimiter: str = ","):
+        self.__path = path
+        self.__delimiter = delimiter
 
     def __enter__(self):
+        self.__file = open(self.__path, "w", encoding=ENCODING, newline="")
+        self.__writer = csv.writer(self.__file, delimiter=self.__delimiter)
         self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
                                 _COL_LIST_INDEX, _COL_LIST_DATE])
         return self

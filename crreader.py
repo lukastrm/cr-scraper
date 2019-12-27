@@ -25,13 +25,14 @@ from comreg.service import Session
 SYS_ARG_NAME_DELAY = "delay"
 SYS_ARG_NAME_COOLDOWN = "cooldown"
 
-
 _OPTION_HELP = "help"
 _OPTION_ROWS = "rows"
 _OPTION_DELAY = "delay"
 _OPTION_REQUEST_LIMIT = "request-limit"
 _OPTION_LIMIT_INTERVAL = "limit-interval"
+_OPTION_SOURCE_DELIMITER = "source-delimiter"
 _OPTION_TARGET_PATH = "target"
+_OPTION_TARGET_DELIMITER = "target-delimiter"
 
 
 class RuntimeOptions:
@@ -42,7 +43,9 @@ class RuntimeOptions:
         self.delay: int = 10
         self.request_limit = 60
         self.limit_interval: int = 60 * 60
+        self.source_delimiter = None
         self.target_path = None
+        self.target_delimiter = None
 
     def set_option(self, option: str, raw_value: Optional[str]) -> None:
         invalid = False
@@ -96,8 +99,12 @@ class RuntimeOptions:
                     return
 
             invalid = True
+        elif option == _OPTION_SOURCE_DELIMITER:
+            self.source_delimiter = raw_value
         elif option == _OPTION_TARGET_PATH:
             self.target_path = raw_value
+        elif option == _OPTION_TARGET_DELIMITER:
+            self.target_delimiter = raw_value
         else:
             print("Ignoring value for unknown option {}".format(option))
 
@@ -176,8 +183,8 @@ def main():
     if options.rows is not None:
         lower = options.rows[0]
         upper = options.rows[1]
-        logger.info("Restricting analysis to input rows {} to {}".format(lower if lower >= 0 else "LOWEST",
-                                                                         upper if upper >= 0 else "HIGHEST"))
+        logger.info("Restricting analysis to input row indices {} to {}"
+                    .format(max(lower, 0), upper if upper >= 0 else "MAX"))
 
     if options.delay > 0:
         logger.info("Request delay: {} seconds".format(options.delay))
@@ -188,6 +195,12 @@ def main():
         logger.info("Request limit: {} per {} seconds".format(options.request_limit, options.limit_interval))
     else:
         logger.info("No request limit set")
+
+    if options.source_delimiter:
+        logger.info("Using source delimiter: {}".format(options.source_delimiter))
+
+    if options.target_delimiter:
+        logger.info("Using source delimiter: {}".format(options.target_delimiter))
 
     # Initialize web service session
     logger.info("Starting session")
@@ -224,18 +237,30 @@ def main():
 
         path += options.target_path + os.path.sep
 
+    if not options.source_delimiter:
+        options.source_delimiter = ","
+
+    if not options.target_delimiter:
+        options.target_delimiter = ","
+
     search_request_helper = SearchRequestHelper(session)
 
-    with SearchInputDataFileReader(files[0]) as reader, \
-            LegalEntityInformationFileWriter(path + "entity-information.csv") as entity_information_writer, \
-            LegalEntityBalanceDatesFileWriter(path + "balance-dates.csv") as balance_dates_writer, \
-            ShareHolderListsFileWriter(path + "shareholder-lists.csv") as shareholder_lists_writer:
+    with SearchInputDataFileReader(files[0], delimiter=options.source_delimiter) as reader, \
+            LegalEntityInformationFileWriter(path + "entity-information.csv", delimiter=options.target_delimiter) \
+                    as entity_information_writer, \
+            LegalEntityBalanceDatesFileWriter(path + "balance-dates.csv", delimiter=options.target_delimiter) \
+                    as balance_dates_writer, \
+            ShareHolderListsFileWriter(path + "shareholder-lists.csv", delimiter=options.target_delimiter) \
+                    as shareholder_lists_writer:
         for i, record in enumerate(reader):
             if options.rows is not None:
                 if i < options.rows[0]:
                     continue
                 elif 0 <= options.rows[1] <= i:
                     break
+
+            if record is None:
+                continue
 
             if session.is_limit_reached():
                 logger.info("Reached request limit, delaying request")
@@ -322,7 +347,7 @@ def main():
 
     logger.info("{} out of {} search requests were successful ({:.2f} % success rate)".
                 format(search_request_successful, search_request_counter,
-                       search_request_successful * 100 / search_request_counter))
+                       search_request_successful * 100 / max(search_request_counter, 1)))
 
 
 if __name__ == "__main__":

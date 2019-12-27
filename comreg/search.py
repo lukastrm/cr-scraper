@@ -95,8 +95,6 @@ class SearchResultEntry:
         self.index: int = index
         self.name: str = name
         self.contents: Dict[str, bool] = {
-            """Python dictionary that contains flags indicating the existence of the different record contents"""
-
             "AD": False,
             "CD": False,
             "HD": False,
@@ -105,6 +103,7 @@ class SearchResultEntry:
             "VÖ": False,
             "SI": False
         }
+        """Python dictionary that contains flags indicating the existence of the different record contents"""
 
     def record_has_content(self, content: str) -> bool:
         """
