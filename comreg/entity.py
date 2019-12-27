@@ -16,6 +16,9 @@ from comreg.search import SearchResultEntry
 from comreg.service import DEFAULT_DOCUMENT_URL
 
 
+REGISTER_TYPES = ["HRA", "HRB", "GnR", "PR", "VR"]
+
+
 class LegalEntityInformation:
 
     def __init__(self, name: str = None, court: str = None, registry_type: str = None, registry_id: str = None,

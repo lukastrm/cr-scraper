@@ -125,8 +125,8 @@ class CourtListFetcher:
 
         :param session: the `Session` object which identifies the session that is used to perform requests on the
         commercial register web service
-        :param url: the URL string on which the request should be executed,
-        defaults to the commercial register search form URL
+        :param url: the URL string on which the request should be executed, defaults to the commercial register
+        search form URL
         """
 
         self.__session: Session = session
@@ -134,7 +134,11 @@ class CourtListFetcher:
         self.result: Optional[CourtList] = None
 
     def run(self) -> Optional[CourtList]:
-        """Runs the fetching operation."""
+        """
+        Runs the fetching operation.
+
+        :return: the `CourtList` object containing the court information or None if the request failed
+        """
 
         result = requests.get(self.__url, cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
 
@@ -148,8 +152,7 @@ class CourtListFetcher:
 
 
 class CourtListParser(HTMLParser):
-    """
-    This class parses the HTML result data that was fetched by the request of the `CourtListFetcher` object. See
+    """This class parses the HTML result data that was fetched by the request of the `CourtListFetcher` object. See
     the documentation for `HTMLParser` for more information about the implemented methods.
 
     This class is an implementation of a simple state machine to parse the given HTML content and extract relevant

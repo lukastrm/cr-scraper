@@ -11,16 +11,15 @@ import re
 import sys
 import logging
 import os.path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 from comreg.court import CourtListFetcher
 from comreg.documents import ShareholderListsFetcher, ShareholderLists
 from comreg.entity import LegalEntityInformationFetcher
 from comreg.file import SearchInputDataFileReader, LegalEntityInformationFileWriter, \
     LegalEntityBalanceDatesFileWriter, ShareHolderListsFileWriter
-from comreg.search import SearchRequest, PARAM_REGISTER_TYPE, PARAM_REGISTER_COURT, PARAM_REGISTER_ID, PARAM_KEYWORDS, \
-    PARAM_KEYWORD_OPTIONS, KEYWORD_OPTION_ALL, PARAM_SEARCH_OPTION_DELETED, KEYWORD_OPTION_EQUAL_NAME, \
-    SearchResultEntry, RECORD_CONTENT_DOCUMENTS, RECORD_CONTENT_LEGAL_ENTITY_INFORMATION
+from comreg.search import SearchRequestHelper, SearchResultEntry, RECORD_CONTENT_DOCUMENTS, \
+    RECORD_CONTENT_LEGAL_ENTITY_INFORMATION, SearchParameters
 from comreg.service import Session
 
 SYS_ARG_NAME_DELAY = "delay"
@@ -225,6 +224,8 @@ def main():
 
         path += options.target_path + os.path.sep
 
+    search_request_helper = SearchRequestHelper(session)
+
     with SearchInputDataFileReader(files[0]) as reader, \
             LegalEntityInformationFileWriter(path + "entity-information.csv") as entity_information_writer, \
             LegalEntityBalanceDatesFileWriter(path + "balance-dates.csv") as balance_dates_writer, \
@@ -241,12 +242,9 @@ def main():
 
             session.make_limited_request()
 
-            search = SearchRequest(session)
-            search.set_param(PARAM_KEYWORDS, record.name)
-            search.set_param(PARAM_REGISTER_TYPE, record.registry_type)
-            search.set_param(PARAM_REGISTER_ID, record.registry_id)
-            search.set_param(PARAM_KEYWORD_OPTIONS, KEYWORD_OPTION_EQUAL_NAME)
-            search.set_param(PARAM_SEARCH_OPTION_DELETED, True)
+            search_parameters = SearchParameters(keywords=record.name, register_type=record.registry_type,
+                                                 register_id=record.registry_id, search_option_deleted=True,
+                                                 keywords_option=SearchParameters.KEYWORDS_OPTION_EQUAL_NAME)
 
             if record.registry_court is not None:
                 court = court_list.get_from_name(record.registry_court)
@@ -260,26 +258,27 @@ def main():
                         logger.warning("Closest match for {} is court {} with identifier {}"
                                        .format(record.registry_court, court.name, court.identifier))
 
-                search.set_param(PARAM_REGISTER_COURT, court.identifier)
+                search_parameters.register_court = court.identifier
 
-            search.run()
+            search_result: List[SearchResultEntry] = search_request_helper.perform_request(search_parameters)
             search_request_counter += 1
 
-            if len(search.result) == 0:
+            if len(search_result) == 0:
                 logger.info("No exact result for name {} with identifier {} {} at court {}, retrying with different "
                             "search options".
                             format(record.name, record.registry_type, record.registry_id, record.registry_court))
 
-                search.set_param(PARAM_REGISTER_TYPE, "")
-                search.set_param(PARAM_REGISTER_ID, "")
-                search.set_param(PARAM_REGISTER_COURT, "")
-                search.run()
+                search_parameters.register_type = None
+                search_parameters.register_id = None
+                search_parameters.register_court = None
 
-                if len(search.result) == 0:
-                    search.set_param(PARAM_KEYWORD_OPTIONS, KEYWORD_OPTION_ALL)
-                    search.run()
+                search_result = search_request_helper.perform_request(search_parameters)
 
-                    if len(search.result) == 0:
+                if len(search_result) == 0:
+                    search_parameters.keywords_option = SearchParameters.KEYWORDS_OPTION_ALL
+                    search_result = search_request_helper.perform_request(search_parameters)
+
+                    if len(search_result) == 0:
                         logger.warning("No result for name {} with identifier {} {} at court {}".
                                        format(record.name, record.registry_type, record.registry_id,
                                               record.registry_court))
@@ -288,13 +287,13 @@ def main():
                         logger.warning("The search result for {} might no be identical to the desired legal entity"
                                        .format(record.name))
 
-            if len(search.result) > 1:
+            if len(search_result) > 1:
                 logger.warning("Too many results for name {} with identifier {} {} at court {}".
                                format(record.name, record.registry_type, record.registry_id, record.registry_court))
                 continue
 
             search_request_successful += 1
-            result: SearchResultEntry = search.result[0]
+            result: SearchResultEntry = search_result[0]
 
             # Check if the search result indicates the existence of legal entity information data,
             # which should always be True
