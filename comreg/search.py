@@ -48,9 +48,9 @@ class SearchParameters:
 
         self.results_per_page = results_per_page
         self.establishment: str = establishment
-        self.register_type: str = register_type
-        self.register_id: str = register_id
-        self.register_court: str = register_court
+        self.registry_type: str = register_type
+        self.registry_id: str = register_id
+        self.registry_court: str = register_court
         self.keywords: str = keywords
         self.keywords_option: int = keywords_option
         self.search_option_deleted: bool = search_option_deleted
@@ -63,9 +63,9 @@ class SearchParameters:
             "suchTyp": "n",
             "ergebnisseProSeite": self.results_per_page,
             "niederlassung": self.establishment,
-            "registerArt": self.register_type if self.register_type is not None else "",
-            "registerNummer": self.register_id if self.register_id is not None else "",
-            "registergericht": self.register_court if self.register_court is not None else "",
+            "registerArt": self.registry_type if self.registry_type is not None else "",
+            "registerNummer": self.registry_id if self.registry_id is not None else "",
+            "registergericht": self.registry_court if self.registry_court is not None else "",
             "schlagwoerter": self.keywords if self.keywords is not None else "",
             "schlagwortOptionen": self.keywords_option,
             "suchOptionenGeloescht": self.search_option_deleted

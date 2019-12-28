@@ -36,6 +36,7 @@ _OPTION_TARGET_DELIMITER = "target-delimiter"
 
 
 class RuntimeOptions:
+    """This class represents a data structure for runtime options provided by command line arguments."""
 
     def __init__(self):
         self.help: bool = False
@@ -113,55 +114,50 @@ class RuntimeOptions:
 
 
 def main():
+    """Main function"""
+
+    # Parse command line arguments and set runtime options accordingly
     args = sys.argv
-    arg_len = len(args)
-
-    if arg_len == 0:
-        raise ValueError
-    if arg_len == 1:
-        print("Usage: crreader <File>([, <File>]) ([<Option> <Value>])")
-        return
-
-    files = []
-    read_options = False
+    file = None
     options = RuntimeOptions()
     option = None
 
-    for arg in args[1:]:
-        if arg.startswith("--"):
-            arg = arg[2:]
+    if len(args) > 1:
+        if os.path.exists(args[1]):
+            file = args[1]
+        else:
+            print("File does not exist or is not accessible: {}".format(file))
+            return
+    else:
+        print("No file provided")
 
-            if not read_options:
-                read_options = True
+    if len(args) > 2:
+        for arg in args[2:]:
+            if arg.startswith("--"):
+                arg = arg[2:]
 
-            if option is not None:
-                options.set_option(option, None)
-                option = arg
-            else:
-                option = arg
+                if option is not None:
+                    options.set_option(option, None)
+                    option = arg
+                else:
+                    option = arg
 
-            continue
+                continue
 
-        if read_options:
             if option is None:
                 print("No option for value {}".format(arg))
             else:
                 options.set_option(option, arg)
                 option = None
-        else:
-            if os.path.exists(arg):
-                files.append(arg)
-            else:
-                print("File does not exist or is not accessible: {}".format(arg))
-                return
 
     if option is not None:
         options.set_option(option, None)
 
     if options.help:
-        print("Usage: crreader <File>([, <File>]) ([<Option> <Value>])")
+        print("Usage: crreader <File> ([<Option> <Value>])")
         return
 
+    # Initialize logger
     log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     logger = logging.getLogger("default")
 
@@ -237,6 +233,7 @@ def main():
 
         path += options.target_path + os.path.sep
 
+    # Set default CSV delimiters if no other values were provided
     if not options.source_delimiter:
         options.source_delimiter = ","
 
@@ -245,13 +242,16 @@ def main():
 
     search_request_helper = SearchRequestHelper(session)
 
-    with SearchInputDataFileReader(files[0], delimiter=options.source_delimiter) as reader, \
+    # Read search input records and initialize writers
+    with SearchInputDataFileReader(file, delimiter=options.source_delimiter) as reader, \
             LegalEntityInformationFileWriter(path + "entity-information.csv", delimiter=options.target_delimiter) \
                     as entity_information_writer, \
             LegalEntityBalanceDatesFileWriter(path + "balance-dates.csv", delimiter=options.target_delimiter) \
                     as balance_dates_writer, \
             ShareHolderListsFileWriter(path + "shareholder-lists.csv", delimiter=options.target_delimiter) \
                     as shareholder_lists_writer:
+
+        # Iterate through all search input records
         for i, record in enumerate(reader):
             if options.rows is not None:
                 if i < options.rows[0]:
@@ -267,10 +267,12 @@ def main():
 
             session.make_limited_request()
 
+            # Set search parameters according to search input request
             search_parameters = SearchParameters(keywords=record.name, register_type=record.registry_type,
                                                  register_id=record.registry_id, search_option_deleted=True,
                                                  keywords_option=SearchParameters.KEYWORDS_OPTION_EQUAL_NAME)
 
+            # Resolve registry court identifier from name
             if record.registry_court is not None:
                 court = court_list.get_from_name(record.registry_court)
 
@@ -283,23 +285,26 @@ def main():
                         logger.warning("Closest match for {} is court {} with identifier {}"
                                        .format(record.registry_court, court.name, court.identifier))
 
-                search_parameters.register_court = court.identifier
+                search_parameters.registry_court = court.identifier
 
+            # Perform search request
             search_result: List[SearchResultEntry] = search_request_helper.perform_request(search_parameters)
             search_request_counter += 1
 
             if len(search_result) == 0:
+                # Repeat search request in case of missing results without formal registry information
                 logger.info("No exact result for name {} with identifier {} {} at court {}, retrying with different "
                             "search options".
                             format(record.name, record.registry_type, record.registry_id, record.registry_court))
 
-                search_parameters.register_type = None
-                search_parameters.register_id = None
-                search_parameters.register_court = None
+                search_parameters.registry_type = None
+                search_parameters.registry_id = None
+                search_parameters.registry_court = None
 
                 search_result = search_request_helper.perform_request(search_parameters)
 
                 if len(search_result) == 0:
+                    # Repeat search request in case of missing results with less strict keyword matching
                     search_parameters.keywords_option = SearchParameters.KEYWORDS_OPTION_ALL
                     search_result = search_request_helper.perform_request(search_parameters)
 
@@ -326,6 +331,7 @@ def main():
                 logger.warning("No legal entity information indicator for {}".format(result.name))
                 continue
 
+            # Fetch legal entity information
             entity_information_fetcher = LegalEntityInformationFetcher(session, result)
             entity_information = entity_information_fetcher.fetch()
 
@@ -337,13 +343,14 @@ def main():
             balance_dates_writer.write(entity_information)
 
             if result.record_has_content(RECORD_CONTENT_DOCUMENTS):
+                # Fetch shareholder lists if documents exist for that record
                 lists_fetcher = ShareholderListsFetcher(session)
                 shareholder_lists: ShareholderLists = lists_fetcher.fetch(result, entity_information)
 
                 if shareholder_lists is None:
                     logger.warning("Cannot fetch shareholder lists for {}".format(entity_information.name))
-
-                shareholder_lists_writer.write(shareholder_lists)
+                else:
+                    shareholder_lists_writer.write(shareholder_lists)
 
     logger.info("{} out of {} search requests were successful ({:.2f} % success rate)".
                 format(search_request_successful, search_request_counter,
