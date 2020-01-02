@@ -12,8 +12,8 @@ import requests
 from html.parser import HTMLParser
 from typing import List, Optional
 
-from comreg.search import SearchResultEntry
-from comreg.service import DEFAULT_DOCUMENT_URL
+from search import SearchResultEntry
+from service import DEFAULT_DOCUMENT_URL
 
 
 REGISTER_TYPES = ["HRA", "HRB", "GnR", "PR", "VR"]

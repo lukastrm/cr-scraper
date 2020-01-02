@@ -13,9 +13,9 @@ from typing import List, Optional
 import requests
 from html.parser import HTMLParser
 
-from comreg.entity import LegalEntityInformation
-from comreg.search import SearchResultEntry
-from comreg.service import Session, DEFAULT_DOCUMENT_URL
+from entity import LegalEntityInformation
+from search import SearchResultEntry
+from service import Session, DEFAULT_DOCUMENT_URL
 
 
 class ShareholderLists:

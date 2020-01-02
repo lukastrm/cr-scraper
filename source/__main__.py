@@ -13,17 +13,14 @@ import logging
 import os.path
 from typing import Tuple, Optional, List
 
-from comreg.court import CourtListFetcher
-from comreg.documents import ShareholderListsFetcher, ShareholderLists
-from comreg.entity import LegalEntityInformationFetcher
-from comreg.file import SearchInputDataFileReader, LegalEntityInformationFileWriter, \
+from court import CourtListFetcher
+from documents import ShareholderListsFetcher, ShareholderLists
+from entity import LegalEntityInformationFetcher
+from file import SearchInputDataFileReader, LegalEntityInformationFileWriter, \
     LegalEntityBalanceDatesFileWriter, ShareHolderListsFileWriter
-from comreg.search import SearchRequestHelper, SearchResultEntry, RECORD_CONTENT_DOCUMENTS, \
+from search import SearchRequestHelper, SearchResultEntry, RECORD_CONTENT_DOCUMENTS, \
     RECORD_CONTENT_LEGAL_ENTITY_INFORMATION, SearchParameters
-from comreg.service import Session
-
-SYS_ARG_NAME_DELAY = "delay"
-SYS_ARG_NAME_COOLDOWN = "cooldown"
+from service import Session
 
 _OPTION_HELP = "help"
 _OPTION_ROWS = "rows"
@@ -130,6 +127,7 @@ def main():
             return
     else:
         print("No file provided")
+        sys.exit(1)
 
     if len(args) > 2:
         for arg in args[2:]:
@@ -203,7 +201,7 @@ def main():
     session = Session(delay=options.delay, request_limit=options.request_limit, limit_interval=options.limit_interval)
     session.initialize()
 
-    if not session:
+    if not session.identifier:
         logger.error("Failed to initialize session")
         sys.exit(1)
 
@@ -358,4 +356,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (KeyboardInterrupt, SystemExit):
+        print("Terminating")
+        pass

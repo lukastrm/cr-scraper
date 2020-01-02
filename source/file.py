@@ -11,8 +11,8 @@ import csv
 import re
 from typing import Optional
 
-from comreg.documents import ShareholderLists
-from comreg.entity import LegalEntityInformation
+from documents import ShareholderLists
+from entity import LegalEntityInformation
 
 ENCODING = "utf-8"
 
@@ -159,6 +159,7 @@ class ShareHolderListsFileWriter:
         self.__writer = csv.writer(self.__file, delimiter=self.__delimiter)
         self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
                                 _COL_LIST_INDEX, _COL_LIST_DATE])
+        self.__file.flush()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -173,3 +174,4 @@ class ShareHolderListsFileWriter:
         for i, date in enumerate(lists.dates):
             self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
                                     entity.structure, i, date])
+            self.__file.flush()

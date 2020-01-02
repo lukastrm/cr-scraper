@@ -13,7 +13,7 @@ from html.parser import HTMLParser
 from typing import List, Optional, Dict
 from difflib import SequenceMatcher
 
-from comreg.service import Session
+from service import Session
 
 _DEFAULT_SEARCH_FORM_URL = "https://www.handelsregister.de/rp_web/mask.do?Typ=n"
 

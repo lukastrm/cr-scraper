@@ -11,7 +11,7 @@ import requests as rq
 from html.parser import HTMLParser
 from typing import Dict, Optional, List
 
-from comreg.service import Session
+from service import Session
 
 DEFAULT_SEARCH_URL = "https://www.handelsregister.de/rp_web/search.do"
 

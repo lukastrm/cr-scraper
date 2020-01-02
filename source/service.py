@@ -13,6 +13,8 @@ from time import sleep, time
 DEFAULT_SEARCH_URL = "https://www.handelsregister.de/rp_web/search.do"
 DEFAULT_DOCUMENT_URL = "https://www.handelsregister.de/rp_web/document.do"
 
+SESSION_COOKIE_NAME = "JSESSIONID"
+
 
 class Session:
 
@@ -32,7 +34,9 @@ class Session:
     def initialize(self) -> None:
         try:
             result = requests.get("https://www.handelsregister.de/rp_web/welcome.do", timeout=(5, 10))
-            self.identifier = result.cookies["JSESSIONID"]
+
+            if result.status_code == 200 and SESSION_COOKIE_NAME in result.cookies:
+                self.identifier = result.cookies[SESSION_COOKIE_NAME]
         except TimeoutError:
             print("Timeout")
             # TODO: Better solution
@@ -56,7 +60,7 @@ class Session:
         return False
 
     def make_limited_request(self) -> None:
-        if self.request_limit <= 0:
+        if self.request_limit > 0:
             current = time()
 
             if self.limited_requests == 0:
@@ -69,6 +73,8 @@ class Session:
                     sleep(remaining)
                     self.limited_requests = 1
                     self.limit_start = time()
+                else:
+                    self.limited_requests += 1
             else:
                 self.limited_requests += 1
 
