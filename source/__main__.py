@@ -9,10 +9,10 @@ explicitly allowed by the package license agreement, service contract or other l
 """
 import re
 import sys
-import logging
 import os.path
 from typing import Tuple, Optional, List
 
+import utils
 from court import CourtListFetcher
 from documents import ShareholderListsFetcher, ShareholderLists
 from entity import LegalEntityInformationFetcher
@@ -156,22 +156,8 @@ def main():
         return
 
     # Initialize logger
-    log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    logger = logging.getLogger("default")
-
-    file_handler = logging.FileHandler("protocol.log", "w")
-    file_handler.setFormatter(log_formatter)
-    logger.addHandler(file_handler)
-
-    error_file_handler = logging.FileHandler("error.log", "w")
-    error_file_handler.setFormatter(log_formatter)
-    error_file_handler.setLevel(logging.WARNING)
-    logger.addHandler(error_file_handler)
-
-    console_handler = logging.StreamHandler(stream=sys.stdout)
-    console_handler.setFormatter(log_formatter)
-    logger.addHandler(console_handler)
-    logger.setLevel(logging.INFO)
+    utils.init_logger()
+    logger = utils.LOGGER
 
     # Log session options
     if options.rows is not None:

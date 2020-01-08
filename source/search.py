@@ -222,7 +222,7 @@ class SearchResultParser(HTMLParser):
         elif self.state == _STATE_RECORD_CONTENT:
             data = data.strip()
 
-            if self.entry.contents[data] is not None:
+            if self.entry.contents.get(data) is not None:
                 self.entry.contents[data] = True
 
     def handle_endtag(self, tag):

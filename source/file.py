@@ -11,20 +11,21 @@ import csv
 import re
 from typing import Optional
 
+import utils
 from documents import ShareholderLists
-from entity import LegalEntityInformation
+from entity import LegalEntityInformation, REGISTRY_TYPES
 
 ENCODING = "utf-8"
 
 
 class SearchInputRecord:
 
-    def __init__(self, name: str = None, registry_type: str = None, registry_id: str = None,
-                 registry_court: str = None):
+    def __init__(self, name: str = None, registry_type: Optional[str] = None, registry_id: Optional[str] = None,
+                 registry_court: Optional[str] = None):
         self.name: str = name
-        self.registry_type: str = registry_type
-        self.registry_id: str = registry_id
-        self.registry_court: str = registry_court
+        self.registry_type: Optional[str] = registry_type
+        self.registry_id: Optional[str] = registry_id
+        self.registry_court: Optional[str] = registry_court
 
     def __repr__(self) -> str:
         return str(self)
@@ -65,9 +66,13 @@ class SearchInputDataFileReader:
             return None
 
         name: str = raw[0]
-        registry_id = re.match(r"^\D*(\d+ ?\w{0,2})\s*$", raw[2])
-        registry_type: str = raw[3]
-        registry_court = raw[5]
+        registry_id: Optional[str] = re.match(r"^\D*(\d+ ?\w{0,2})\s*$", raw[2])
+        registry_type: Optional[str] = raw[3]
+        registry_court: Optional[str] = raw[5]
+
+        if registry_type is not None and registry_type not in REGISTRY_TYPES:
+            utils.LOGGER.error("Omitting invalid registry type {} for search record {}".format(registry_type, name))
+            registry_type = None
 
         return SearchInputRecord(name, registry_type, None if registry_id is None else registry_id.group(1),
                                  registry_court)

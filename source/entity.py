@@ -16,28 +16,31 @@ from search import SearchResultEntry
 from service import DEFAULT_DOCUMENT_URL
 
 
-REGISTER_TYPES = ["HRA", "HRB", "GnR", "PR", "VR"]
+REGISTRY_TYPES = ["HRA", "HRB", "GnR", "PR", "VR"]
 
 
 class LegalEntityInformation:
 
-    def __init__(self, name: str = None, court: str = None, registry_type: str = None, registry_id: str = None,
-                 structure: str = None, capital: int = None, capital_currency: str = None, entry: str = None,
-                 deletion: str = None, balance: List[str] = None, address: str = None, post_code: str = None,
-                 city: str = None):
-        self.name: str = name
-        self.registry_court: str = court
-        self.registry_type: str = registry_type
-        self.registry_id: str = registry_id
-        self.structure: str = structure
-        self.capital: int = capital
-        self.capital_currency: str = capital_currency
-        self.entry: str = entry
-        self.deletion: str = deletion
-        self.balance: List[str] = balance
-        self.address: str = address
-        self.post_code: str = post_code
-        self.city: str = city
+    def __init__(self, name: Optional[str] = None, court: Optional[str] = None, registry_type: Optional[str] = None, registry_id: Optional[str] = None,
+                 structure: Optional[str] = None, capital: Optional[int] = None, capital_currency: Optional[str] = None, entry: Optional[str] = None,
+                 deletion: Optional[str] = None, balance: Optional[List[str]] = None, address: Optional[str] = None, post_code: Optional[str] = None,
+                 city: Optional[str] = None):
+        if registry_type is not None and registry_type not in REGISTRY_TYPES:
+            raise ValueError("Unknown registry type")
+
+        self.name: Optional[str] = name
+        self.registry_court: Optional[str] = court
+        self.registry_type: Optional[str] = registry_type
+        self.registry_id: Optional[str] = registry_id
+        self.structure: Optional[str] = structure
+        self.capital: Optional[int] = capital
+        self.capital_currency: Optional[str] = capital_currency
+        self.entry: Optional[str] = entry
+        self.deletion: Optional[str] = deletion
+        self.balance: Optional[List[str]] = balance
+        self.address: Optional[str] = address
+        self.post_code: Optional[str] = post_code
+        self.city: Optional[str] = city
 
     def __repr__(self) -> str:
         return str(self)
