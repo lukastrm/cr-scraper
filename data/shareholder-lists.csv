@@ -1,2 +1,11 @@
-name,registry_type,registry_id,registry_court,structure,list_index,list_date
-Maschintec Produktions GmbH,HRB,507565,Jena,Gesellschaft mit beschränkter Haftung,0,23.01.2012
+name,registry_type,registry_id,registry_court,structure,list_index,list_date_day,list_date_month,list_date_year
+Maschintec Produktions GmbH,HRB,507565,Jena,Gesellschaft mit beschränkter Haftung,0,23,01,2012
+MR Spaija GmbH,HRB,139448,Berlin (Charlottenburg),Gesellschaft mit beschränkter Haftung,0,24,01,2012
+bikeBox24 GmbH,HRB,43871,Mainz,Gesellschaft mit beschränkter Haftung,0,20,04,2018
+bikeBox24 GmbH,HRB,43871,Mainz,Gesellschaft mit beschränkter Haftung,1,03,01,2018
+bikeBox24 GmbH,HRB,43871,Mainz,Gesellschaft mit beschränkter Haftung,2,03,01,2018
+bikeBox24 GmbH,HRB,43871,Mainz,Gesellschaft mit beschränkter Haftung,3,26,02,2015
+bikeBox24 GmbH,HRB,43871,Mainz,Gesellschaft mit beschränkter Haftung,4,26,02,2015
+bikeBox24 GmbH,HRB,43871,Mainz,Gesellschaft mit beschränkter Haftung,5,26,02,2015
+bikeBox24 GmbH,HRB,43871,Mainz,Gesellschaft mit beschränkter Haftung,6,31,03,2014
+bikeBox24 GmbH,HRB,43871,Mainz,Gesellschaft mit beschränkter Haftung,7,15,03,2012

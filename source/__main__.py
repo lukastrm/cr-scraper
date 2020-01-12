@@ -14,7 +14,7 @@ from typing import Tuple, Optional, List
 
 import utils
 from court import CourtListFetcher
-from documents import ShareholderListsFetcher, ShareholderLists
+from documents import DocumentsTreeFetcher, ShareholderLists, DocumentsTreeElement
 from entity import LegalEntityInformationFetcher
 from file import SearchInputDataFileReader, LegalEntityInformationFileWriter, \
     LegalEntityBalanceDatesFileWriter, ShareHolderListsFileWriter
@@ -266,8 +266,9 @@ def main():
                     if court is None:
                         logger.warning("No court identifier found for {}".format(record.registry_court))
                     else:
-                        logger.warning("Closest match for {} is court {} with identifier {}"
-                                       .format(record.registry_court, court.name, court.identifier))
+                        logger.warning("Closest match for {} regarding {} ({} {}) is court {} with identifier {}"
+                                       .format(record.registry_court, record.name, record.registry_type,
+                                               record.registry_id, court.name, court.identifier))
 
                 search_parameters.registry_court = court.identifier
 
@@ -293,16 +294,16 @@ def main():
                     search_result = search_request_helper.perform_request(search_parameters)
 
                     if len(search_result) == 0:
-                        logger.warning("No result for name {} with identifier {} {} at court {}".
+                        logger.warning("No result for {} with identifier {} {} at court {}".
                                        format(record.name, record.registry_type, record.registry_id,
                                               record.registry_court))
                         continue
                     else:
-                        logger.warning("The search result for {} might no be identical to the desired legal entity"
+                        logger.warning("The search result for {} might not be identical to the desired legal entity"
                                        .format(record.name))
 
             if len(search_result) > 1:
-                logger.warning("Too many results for name {} with identifier {} {} at court {}".
+                logger.warning("Too many results for {} with identifier {} {} at court {}".
                                format(record.name, record.registry_type, record.registry_id, record.registry_court))
                 continue
 
@@ -328,13 +329,13 @@ def main():
 
             if result.record_has_content(RECORD_CONTENT_DOCUMENTS):
                 # Fetch shareholder lists if documents exist for that record
-                lists_fetcher = ShareholderListsFetcher(session)
-                shareholder_lists: ShareholderLists = lists_fetcher.fetch(result, entity_information)
+                documents_tree_fetcher = DocumentsTreeFetcher(session)
+                documents: Optional[DocumentsTreeElement] = documents_tree_fetcher.fetch(result)
 
-                if shareholder_lists is None:
+                if documents is None:
                     logger.warning("Cannot fetch shareholder lists for {}".format(entity_information.name))
                 else:
-                    shareholder_lists_writer.write(shareholder_lists)
+                    shareholder_lists_writer.write(ShareholderLists(entity_information, documents))
 
     logger.info("{} out of {} search requests were successful ({:.2f} % success rate)".
                 format(search_request_successful, search_request_counter,

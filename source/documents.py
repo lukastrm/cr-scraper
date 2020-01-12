@@ -18,11 +18,22 @@ from search import SearchResultEntry
 from service import Session, DEFAULT_DOCUMENT_URL
 
 
-class ShareholderLists:
+class DocumentsTreeElement:
 
-    def __init__(self, entity: LegalEntityInformation, dates: Optional[List[str]] = None):
-        self.entity = entity
-        self.dates = [] if dates is None else dates
+    def __init__(self, name: str = None, as_directory: bool = False, parent: "DocumentsTreeElement" = None):
+        self.name: Optional[str] = name
+        self.parent: Optional[DocumentsTreeElement] = parent
+        self.children: Optional[List[DocumentsTreeElement]] = [] if as_directory else None
+
+    def create_child(self, name: str = None, as_directory: bool = False) -> "DocumentsTreeElement":
+        element = DocumentsTreeElement(name, as_directory, self)
+
+        if self.children is not None:
+            self.children.append(element)
+        else:
+            raise ValueError("Cannot create a child for an element that is not a directory")
+
+        return element
 
     def __repr__(self) -> str:
         return str(self)
@@ -31,20 +42,50 @@ class ShareholderLists:
         return str(self.__dict__)
 
 
-class ShareholderListsFetcher:
+class ShareholderLists:
+
+    def __init__(self, entity: LegalEntityInformation, documents: DocumentsTreeElement):
+        self.entity = entity
+        self._documents = documents
+        self.dates: List[Optional[str]] = self.__extract(documents.children)
+
+    def __extract(self, documents: List[DocumentsTreeElement], is_shareholder_lists: bool = False) -> List[Optional[str]]:
+        dates = []
+
+        for document in documents:
+            if document.children is not None:
+                dates.extend(self.__extract(document.children, is_shareholder_lists or document.name == "Liste der Gesellschafter"))
+            elif is_shareholder_lists:
+                if document.name.startswith("Liste der Gesellschafter"):
+                    match = re.search(r"(\d{1,2}.\d{1,2}.\d{2,4})", document.name)
+
+                    if match is not None:
+                        dates.append(match.group(1))
+                    else:
+                        dates.append(None)
+
+        return dates
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return str(self.__dict__)
+
+
+class DocumentsTreeFetcher:
 
     def __init__(self, session: Session, url: str = DEFAULT_DOCUMENT_URL):
         self.__session: Session = session
         self.__url: str = url
-        self.result: Optional[ShareholderLists] = None
+        self.result: Optional[DocumentsTreeElement] = None
 
-    def fetch(self, search_result_entry: SearchResultEntry, entity: LegalEntityInformation) -> \
-            Optional[ShareholderLists]:
+    def fetch(self, search_result_entry: SearchResultEntry) -> Optional[DocumentsTreeElement]:
         result = requests.get(self.__url, params={"doctyp": "DK", "index": search_result_entry.index},
                               cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
 
         if result.status_code == 200:
-            parser: ShareholderListsParser = ShareholderListsParser(entity)
+            parser = DocumentsTreeParser()
             parser.feed(result.text)
 
             if parser.result is not None:
@@ -57,77 +98,64 @@ class ShareholderListsFetcher:
 
 _STATE_VOID = 0
 _STATE_ERROR = 1
-_STATE_HEADING = 2
-_STATE_AWAIT_LISTS_HEADER = 3
-_STATE_LISTS_HEADER = 4
-_STATE_AWAIT_TREE_ELEMENT = 5
-_STATE_TREE_FILE = 6
-_STATE_SUB_TREE = 7
+_STATE_DIRECTORY_ROOT = 2
+_STATE_DIRECTORY_CONTENTS = 3
+_STATE_FILE_ROOT = 4
+_STATE_FINISHED = 5
 
 
-class ShareholderListsParser(HTMLParser):
+class DocumentsTreeParser(HTMLParser):
 
-    def __init__(self, entity: LegalEntityInformation):
+    def __init__(self):
         super().__init__()
 
-        self.__entity = entity
-        self.__state: int = _STATE_VOID
-        self.__tree_depth: int = 0
-        self.__date: str = ""
-        self.result: ShareholderLists = ShareholderLists(self.__entity)
+        self._state: int = _STATE_VOID
+        self._depth: int = 0
+        self._element: Optional[DocumentsTreeElement] = None
+        self.result: Optional[DocumentsTreeElement] = None
 
     def error(self, message):
-        self.__state = _STATE_ERROR
-        self.result = None
+        self._element = None
+        self._state = _STATE_ERROR
 
     def handle_starttag(self, tag, attrs):
-        if tag == "a":
-            if self.__state == _STATE_VOID:
-                self.__state = _STATE_AWAIT_LISTS_HEADER
-        elif tag == "div":
-            if self.__state == _STATE_LISTS_HEADER:
-                self.__state = _STATE_AWAIT_TREE_ELEMENT
-            elif self.__state == _STATE_AWAIT_TREE_ELEMENT or self.__state == _STATE_SUB_TREE:
-                for attr_name, attr_value in attrs:
-                    if attr_name == "class":
-                        if attr_value == "tree-file":
-                            self.__state = _STATE_TREE_FILE
-                        elif attr_value == "tree-node":
-                            self.__state = _STATE_SUB_TREE
-                            self.__tree_depth += 1
-        elif tag == "h3":
-            if self.__state == _STATE_VOID:
-                self.__state = _STATE_HEADING
+        if tag == "div":
+            for key, value in attrs:
+                if key == "id":
+                    if value == "tree-root" and self._state == _STATE_VOID:
+                        self._element = DocumentsTreeElement("", True)
+                        self._state = _STATE_DIRECTORY_ROOT
+                        self._depth = 1
+                elif key == "class":
+                    if (value == "tree-open" or value == "tree-closed") and self._state == _STATE_DIRECTORY_ROOT:
+                        self._state = _STATE_DIRECTORY_CONTENTS
+                    elif value == "tree-node" and self._state == _STATE_DIRECTORY_CONTENTS:
+                        self._element = self._element.create_child("", True)
+                        self._state = _STATE_DIRECTORY_ROOT
+                        self._depth += 1
+                    elif value == "tree-file" and self._state == _STATE_DIRECTORY_CONTENTS:
+                        self._element = self._element.create_child("")
+                        self._state = _STATE_FILE_ROOT
 
     def handle_data(self, data):
-        if self.__state == _STATE_AWAIT_LISTS_HEADER:
-            if data.strip() == "Liste der Gesellschafter":
-                self.__state = _STATE_LISTS_HEADER
-        elif self.__state == _STATE_TREE_FILE:
-            self.__date += data.strip()
-        elif self.__state == _STATE_HEADING:
-            if "Fehler" in data:
-                self.error(None)
+        if self._state == _STATE_DIRECTORY_ROOT or self._state == _STATE_FILE_ROOT:
+            self._element.name += data
 
     def handle_endtag(self, tag):
-        if tag == "a":
-            if self.__state == _STATE_AWAIT_LISTS_HEADER:
-                self.__state = _STATE_VOID
-        elif tag == "div":
-            if self.__state == _STATE_TREE_FILE:
-                match = re.match(r".*(\d{2}.\d{2}.\d{4}).*", self.__date)
+        if tag == "div":
+            if self._state == _STATE_FILE_ROOT:
+                self._element.name = self._element.name.strip()
+                self._element = self._element.parent
+                self._state = _STATE_DIRECTORY_CONTENTS
+            elif self._state == _STATE_DIRECTORY_CONTENTS:
+                self._state = _STATE_DIRECTORY_ROOT
+            elif self._state == _STATE_DIRECTORY_ROOT:
+                self._element.name = self._element.name.strip()
+                self._depth -= 1
 
-                if self.result is not None:
-                    self.result.dates.append(None if match is None else match.group(1))
-
-                self.__date = ""
-                self.__state = _STATE_AWAIT_TREE_ELEMENT
-            elif self.__state == _STATE_AWAIT_TREE_ELEMENT:
-                if self.__tree_depth > 0:
-                    self.__state = _STATE_AWAIT_TREE_ELEMENT
-                    self.__tree_depth -= 1
+                if self._depth > 0:
+                    self._element = self._element.parent
+                    self._state = _STATE_DIRECTORY_CONTENTS
                 else:
-                    self.__state = _STATE_VOID
-        elif tag == "h3":
-            if self.__state == _STATE_HEADING:
-                self.__state = _STATE_VOID
+                    self.result = self._element
+                    self._state = _STATE_FINISHED

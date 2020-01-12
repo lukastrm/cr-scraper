@@ -1,2 +1,5 @@
-name,registry_type,registry_id,registry_court,structure,capital,capital_currency,entry,deletion,balance,address,post_code,city
-Maschintec Produktions GmbH,HRB,507565,Jena,Gesellschaft mit beschränkter Haftung,4601700.0,EUR,23.01.2012,,False,Lindenstraße 5,99819,Krauthausen
+name,registry_type,registry_id,registry_court,structure,capital,capital_currency,entry_day,entry_month,entry_year,deletion,deletion_month,deletion_year,balance,address,post_code,city
+Maschintec Produktions GmbH,HRB,507565,Jena,Gesellschaft mit beschränkter Haftung,4601700.0,EUR,23,01,2012,,,,False,Lindenstraße 5,99819,Krauthausen
+MR Spaija GmbH,HRB,139448,Berlin (Charlottenburg),Gesellschaft mit beschränkter Haftung,25000.0,EUR,24,01,2012,,,,False,Schluchseestraße 20 B,13469,Berlin
+MBS Stahlbaureparaturen GmbH & Co. KG,HRA,702971,Freiburg,Kommanditgesellschaft,,,22,08,2012,,,,False,Offostraße 8,77948,Friesenheim
+bikeBox24 GmbH,HRB,43871,Mainz,Gesellschaft mit beschränkter Haftung,25000.0,EUR,15,03,2012,,,,False,Am Giener 33,55268,Nieder-Olm

@@ -18,6 +18,16 @@ from entity import LegalEntityInformation, REGISTRY_TYPES
 ENCODING = "utf-8"
 
 
+def date_components(date: str):
+    if date:
+        match = re.match(r"(\d{1,2}).(\d{1,2}).(\d{2,4})", date)
+
+        if match:
+            return [match.group(1), match.group(2), match.group(3)]
+
+    return [None, None, None]
+
+
 class SearchInputRecord:
 
     def __init__(self, name: str = None, registry_type: Optional[str] = None, registry_id: Optional[str] = None,
@@ -85,8 +95,12 @@ _COL_REGISTRY_COURT = "registry_court"
 _COL_STRUCTURE = "structure"
 _COL_CAPITAL = "capital"
 _COL_CAPITAL_CURRENCY = "capital_currency"
-_COL_ENTRY = "entry"
-_COL_DELETION = "deletion"
+_COL_ENTRY_DAY = "entry_day"
+_COL_ENTRY_MONTH = "entry_month"
+_COL_ENTRY_YEAR = "entry_year"
+_COL_DELETION_DAY = "deletion"
+_COL_DELETION_MONTH = "deletion_month"
+_COL_DELETION_YEAR = "deletion_year"
 _COL_BALANCE = "balance"
 _COL_ADDRESS = "address"
 _COL_POST_CODE = "post_code"
@@ -106,8 +120,9 @@ class LegalEntityInformationFileWriter:
         self.__file = open(self.__path, "w", encoding=ENCODING, newline="")
         self.__writer = csv.writer(self.__file, delimiter=self.__delimiter)
         self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
-                                _COL_CAPITAL, _COL_CAPITAL_CURRENCY, _COL_ENTRY, _COL_DELETION, _COL_BALANCE,
-                                _COL_ADDRESS, _COL_POST_CODE, _COL_CITY])
+                                _COL_CAPITAL, _COL_CAPITAL_CURRENCY, _COL_ENTRY_DAY, _COL_ENTRY_MONTH, _COL_ENTRY_YEAR,
+                                _COL_DELETION_DAY, _COL_DELETION_MONTH, _COL_DELETION_YEAR, _COL_BALANCE, _COL_ADDRESS,
+                                _COL_POST_CODE, _COL_CITY])
         self.__file.flush()
         return self
 
@@ -116,10 +131,16 @@ class LegalEntityInformationFileWriter:
 
     def write(self, entity: LegalEntityInformation):
         self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
-                                entity.structure, entity.capital, entity.capital_currency, entity.entry,
-                                entity.deletion, entity.balance is not None and not entity.balance, entity.address,
+                                entity.structure, entity.capital, entity.capital_currency,
+                                *date_components(entity.entry),  *date_components(entity.deletion),
+                                entity.balance is not None and not entity.balance, entity.address,
                                 entity.post_code, entity.city])
         self.__file.flush()
+
+
+_COL_BALANCE_DAY = "balance_day"
+_COL_BALANCE_MONTH = "balance_month"
+_COL_BALANCE_YEAR = "balance_year"
 
 
 class LegalEntityBalanceDatesFileWriter:
@@ -134,7 +155,8 @@ class LegalEntityBalanceDatesFileWriter:
     def __enter__(self):
         self.__file = open(self.__path, "w", encoding=ENCODING, newline="")
         self.__writer = csv.writer(self.__file, delimiter=self.__delimiter)
-        self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_BALANCE])
+        self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_BALANCE_DAY,
+                                _COL_BALANCE_MONTH, _COL_BALANCE_YEAR])
         self.__file.flush()
         return self
 
@@ -145,12 +167,14 @@ class LegalEntityBalanceDatesFileWriter:
         if entity.balance:
             for date in entity.balance:
                 self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
-                                        date])
+                                        *date_components(date)])
                 self.__file.flush()
 
 
 _COL_LIST_INDEX = "list_index"
-_COL_LIST_DATE = "list_date"
+_COL_LIST_DATE_DAY = "list_date_day"
+_COL_LIST_DATE_MONTH = "list_date_month"
+_COL_LIST_DATE_YEAR = "list_date_year"
 
 
 class ShareHolderListsFileWriter:
@@ -163,7 +187,7 @@ class ShareHolderListsFileWriter:
         self.__file = open(self.__path, "w", encoding=ENCODING, newline="")
         self.__writer = csv.writer(self.__file, delimiter=self.__delimiter)
         self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
-                                _COL_LIST_INDEX, _COL_LIST_DATE])
+                                _COL_LIST_INDEX, _COL_LIST_DATE_DAY, _COL_LIST_DATE_MONTH, _COL_LIST_DATE_YEAR])
         self.__file.flush()
         return self
 
@@ -178,5 +202,5 @@ class ShareHolderListsFileWriter:
 
         for i, date in enumerate(lists.dates):
             self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
-                                    entity.structure, i, date])
+                                    entity.structure, i, *date_components(date)])
             self.__file.flush()
