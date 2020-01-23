@@ -30,12 +30,12 @@ def date_components(date: str):
 
 class SearchInputRecord:
 
-    def __init__(self, name: str = None, registry_type: Optional[str] = None, registry_id: Optional[str] = None,
-                 registry_court: Optional[str] = None):
+    def __init__(self, name: str = None, registry_court: Optional[str] = None, registry_type: Optional[str] = None,
+                 registry_id: Optional[str] = None):
         self.name: str = name
+        self.registry_court: Optional[str] = registry_court
         self.registry_type: Optional[str] = registry_type
         self.registry_id: Optional[str] = registry_id
-        self.registry_court: Optional[str] = registry_court
 
     def __repr__(self) -> str:
         return str(self)
@@ -53,6 +53,10 @@ class SearchInputDataFileReader:
 
         self.__file = None
         self.__reader = None
+        self.__index_name = -1
+        self.__index_registry_type = -1
+        self.__index_registry_id = -1
+        self.__index_registry_court = -1
 
     def __enter__(self):
         self.__file = open(self.__path, "r", encoding=ENCODING)
@@ -66,26 +70,30 @@ class SearchInputDataFileReader:
         return self
 
     def __next__(self) -> Optional[SearchInputRecord]:
-        if self.__header:
-            next(self.__reader)
-            self.__header = False
-
         raw: str = next(self.__reader)
+
+        if self.__header:
+            self.__index_name = raw.index("firm")
+            self.__index_registry_court = raw.index("city")
+            self.__index_registry_type = raw.index("hrsection")
+            self.__index_registry_id = raw.index("hrid")
+            self.__header = False
+            raw = next(self.__reader)
 
         if len(raw) < 6:
             return None
 
-        name: str = raw[0]
-        registry_id: Optional[str] = re.match(r"^\D*(\d+ ?\w{0,2})\s*$", raw[2])
-        registry_type: Optional[str] = raw[3]
-        registry_court: Optional[str] = raw[5]
+        name: str = raw[self.__index_name]
+        registry_court: Optional[str] = raw[self.__index_registry_court].strip()
+        registry_type: Optional[str] = raw[self.__index_registry_type].strip()
+        registry_id: Optional[str] = re.match(r"^\D*(\d+ ?\w{0,2})\s*$", raw[self.__index_registry_id])
 
         if registry_type is not None and registry_type not in REGISTRY_TYPES:
             utils.LOGGER.error("Omitting invalid registry type {} for search record {}".format(registry_type, name))
             registry_type = None
 
-        return SearchInputRecord(name, registry_type, None if registry_id is None else registry_id.group(1),
-                                 registry_court)
+        return SearchInputRecord(name, registry_court, registry_type,
+                                 None if registry_id is None else registry_id.group(1).strip())
 
 
 _COL_NAME = "name"

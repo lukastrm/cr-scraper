@@ -307,7 +307,6 @@ def main():
                                format(record.name, record.registry_type, record.registry_id, record.registry_court))
                 continue
 
-            search_request_successful += 1
             result: SearchResultEntry = search_result[0]
 
             # Check if the search result indicates the existence of legal entity information data,
@@ -323,6 +322,8 @@ def main():
             if entity_information is None:
                 logger.warning("Cannot fetch detailed information for {}".format(result.name))
                 continue
+
+            search_request_successful += 1
 
             entity_information_writer.write(entity_information)
             balance_dates_writer.write(entity_information)

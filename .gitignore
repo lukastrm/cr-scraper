@@ -3,3 +3,5 @@ venv/
 __pycache__
 *.txt
 *.log
+source/*.csv
+.DS_Store
