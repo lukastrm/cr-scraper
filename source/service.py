@@ -45,7 +45,7 @@ class Session:
         self.identifier = None
 
     def is_limit_reached(self) -> bool:
-        if self.request_limit <= 0:
+        if self.request_limit <= 0 or self.limit_interval <= 0:
             return False
 
         current = time()
@@ -60,7 +60,7 @@ class Session:
         return False
 
     def make_limited_request(self) -> None:
-        if self.request_limit > 0:
+        if self.request_limit > 0 and self.limit_interval > 0:
             current = time()
 
             if self.limited_requests == 0:

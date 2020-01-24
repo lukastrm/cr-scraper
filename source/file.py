@@ -37,6 +37,11 @@ class SearchInputRecord:
         self.registry_type: Optional[str] = registry_type
         self.registry_id: Optional[str] = registry_id
 
+    def simple_string(self) -> str:
+        return "{} ({} {}, {})".format(self.name, self.registry_type if self.registry_type else "unknown registry type",
+                                       self.registry_id if self.registry_id else "unknown registry id",
+                                       self.registry_court if self.registry_court else "unknown court")
+
     def __repr__(self) -> str:
         return str(self)
 
@@ -113,6 +118,7 @@ _COL_BALANCE = "balance"
 _COL_ADDRESS = "address"
 _COL_POST_CODE = "post_code"
 _COL_CITY = "city"
+_COL_SEARCH_POLICY = "search_policy"
 
 
 class LegalEntityInformationFileWriter:
@@ -130,19 +136,19 @@ class LegalEntityInformationFileWriter:
         self.__writer.writerow([_COL_NAME, _COL_REGISTRY_TYPE, _COL_REGISTRY_ID, _COL_REGISTRY_COURT, _COL_STRUCTURE,
                                 _COL_CAPITAL, _COL_CAPITAL_CURRENCY, _COL_ENTRY_DAY, _COL_ENTRY_MONTH, _COL_ENTRY_YEAR,
                                 _COL_DELETION_DAY, _COL_DELETION_MONTH, _COL_DELETION_YEAR, _COL_BALANCE, _COL_ADDRESS,
-                                _COL_POST_CODE, _COL_CITY])
+                                _COL_POST_CODE, _COL_CITY, _COL_SEARCH_POLICY])
         self.__file.flush()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.__file.close()
 
-    def write(self, entity: LegalEntityInformation):
+    def write(self, entity: LegalEntityInformation, search_policy: int):
         self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
                                 entity.structure, entity.capital, entity.capital_currency,
                                 *date_components(entity.entry),  *date_components(entity.deletion),
                                 entity.balance is not None and not entity.balance, entity.address,
-                                entity.post_code, entity.city])
+                                entity.post_code, entity.city, search_policy])
         self.__file.flush()
 
 

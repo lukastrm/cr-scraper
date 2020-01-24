@@ -15,19 +15,20 @@ LOGGER = None
 
 def init_logger():
     global LOGGER
-    log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+
+    log_file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     LOGGER = logging.getLogger("default")
 
     file_handler = logging.FileHandler("protocol.log", "w")
-    file_handler.setFormatter(log_formatter)
+    file_handler.setFormatter(log_file_formatter)
     LOGGER.addHandler(file_handler)
 
     error_file_handler = logging.FileHandler("error.log", "w")
-    error_file_handler.setFormatter(log_formatter)
+    error_file_handler.setFormatter(log_file_formatter)
     error_file_handler.setLevel(logging.WARNING)
     LOGGER.addHandler(error_file_handler)
 
     console_handler = logging.StreamHandler(stream=sys.stdout)
-    console_handler.setFormatter(log_formatter)
+    console_handler.setFormatter(logging.Formatter("\r%(asctime)s [%(levelname)s] %(message)s"))
     LOGGER.addHandler(console_handler)
     LOGGER.setLevel(logging.INFO)

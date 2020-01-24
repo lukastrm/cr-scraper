@@ -27,9 +27,20 @@ _OPTION_ROWS = "rows"
 _OPTION_DELAY = "delay"
 _OPTION_REQUEST_LIMIT = "request-limit"
 _OPTION_LIMIT_INTERVAL = "limit-interval"
+_OPTION_SEARCH_POLICY = "search-policy"
 _OPTION_SOURCE_DELIMITER = "source-delimiter"
 _OPTION_TARGET_PATH = "target"
 _OPTION_TARGET_DELIMITER = "target-delimiter"
+
+SEARCH_POLICY_STRICT = 1
+SEARCH_POLICY_NAME = 2
+SEARCH_POLICY_KEYWORDS = 3
+
+_OPTION_SEARCH_POLICY_VALUES = {
+    "strict": SEARCH_POLICY_STRICT,
+    "name": SEARCH_POLICY_NAME,
+    "keywords": SEARCH_POLICY_KEYWORDS
+}
 
 
 class RuntimeOptions:
@@ -37,10 +48,11 @@ class RuntimeOptions:
 
     def __init__(self):
         self.help: bool = False
-        self.rows: Tuple[int, int] = None
+        self.rows: Tuple[int, int] = (-1, -1)
         self.delay: int = 10
         self.request_limit = 60
         self.limit_interval: int = 60 * 60
+        self.search_policy: int = SEARCH_POLICY_STRICT
         self.source_delimiter = None
         self.target_path = None
         self.target_delimiter = None
@@ -97,6 +109,11 @@ class RuntimeOptions:
                     return
 
             invalid = True
+        elif option == _OPTION_SEARCH_POLICY:
+            if raw_value in _OPTION_SEARCH_POLICY_VALUES.keys():
+                self.search_policy = _OPTION_SEARCH_POLICY_VALUES[raw_value]
+            else:
+                invalid = True
         elif option == _OPTION_SOURCE_DELIMITER:
             self.source_delimiter = raw_value
         elif option == _OPTION_TARGET_PATH:
@@ -120,9 +137,9 @@ def main():
     option = None
 
     if len(args) > 1:
-        if os.path.exists(args[1]):
-            file = args[1]
-        else:
+        file = args[1]
+
+        if not os.path.exists(file):
             print("File does not exist or is not accessible: {}".format(file))
             return
     else:
@@ -145,7 +162,7 @@ def main():
             if option is None:
                 print("No option for value {}".format(arg))
             else:
-                options.set_option(option, arg)
+                options.set_option(option, arg.lower())
                 option = None
 
     if option is not None:
@@ -160,11 +177,10 @@ def main():
     logger = utils.LOGGER
 
     # Log session options
-    if options.rows is not None:
-        lower = options.rows[0]
+    if options.rows[0] > 0 or options.rows[1] > 0:
         upper = options.rows[1]
         logger.info("Restricting analysis to input row indices {} to {}"
-                    .format(max(lower, 0), upper if upper >= 0 else "MAX"))
+                    .format(max(options.rows[0], 0), upper if upper >= 0 else "MAX"))
 
     if options.delay > 0:
         logger.info("Request delay: {} seconds".format(options.delay))
@@ -175,6 +191,16 @@ def main():
         logger.info("Request limit: {} per {} seconds".format(options.request_limit, options.limit_interval))
     else:
         logger.info("No request limit set")
+
+    if options.search_policy == SEARCH_POLICY_STRICT:
+        logger.info("Using (default) strict search policy")
+    elif options.search_policy == SEARCH_POLICY_NAME:
+        logger.info("Using less strict name search policy")
+    elif options.search_policy == SEARCH_POLICY_KEYWORDS:
+        logger.info("Using vague keywords search policy")
+    else:
+        logger.warning("Unknown search policy, using default strict search policy")
+        options.search_policy = SEARCH_POLICY_STRICT
 
     if options.source_delimiter:
         logger.info("Using source delimiter: {}".format(options.source_delimiter))
@@ -247,7 +273,9 @@ def main():
                 continue
 
             if session.is_limit_reached():
-                logger.info("Reached request limit, delaying request")
+                logger.info("Reached request limit after search record {}, delaying request"
+                            .format(search_request_counter))
+                print("> Delaying request{}\r".format(" " * 40))
 
             session.make_limited_request()
 
@@ -255,6 +283,8 @@ def main():
             search_parameters = SearchParameters(keywords=record.name, register_type=record.registry_type,
                                                  register_id=record.registry_id, search_option_deleted=True,
                                                  keywords_option=SearchParameters.KEYWORDS_OPTION_EQUAL_NAME)
+
+            search_policy = options.search_policy
 
             # Resolve registry court identifier from name
             if record.registry_court is not None:
@@ -272,39 +302,55 @@ def main():
 
                 search_parameters.registry_court = court.identifier
 
-            # Perform search request
-            search_result: List[SearchResultEntry] = search_request_helper.perform_request(search_parameters)
             search_request_counter += 1
+            print("> Processing record {}{}\r".format(search_request_counter, " " * 40), end="")
 
-            if len(search_result) == 0:
-                # Repeat search request in case of missing results without formal registry information
-                logger.info("No exact result for name {} with identifier {} {} at court {}, retrying with different "
-                            "search options".
-                            format(record.name, record.registry_type, record.registry_id, record.registry_court))
+            search_result: Optional[List[SearchResultEntry]] = None
 
+            # Perform search request for strict search policy
+            if search_policy == SEARCH_POLICY_STRICT:
+                search_result = search_request_helper.perform_request(search_parameters)
+
+                if search_result is not None and len(search_result) == 0:
+                    search_policy = SEARCH_POLICY_NAME
+
+                    # Repeat search request in case of missing results without formal registry information
+                    logger.info("No exact result for {}}, retrying with name search policy"
+                                .format(record.name, record.registry_type, record.registry_id, record.registry_court))
+
+            # Perform search request for search policy with matching name
+            if search_policy == SEARCH_POLICY_NAME:
                 search_parameters.registry_type = None
                 search_parameters.registry_id = None
                 search_parameters.registry_court = None
 
                 search_result = search_request_helper.perform_request(search_parameters)
 
-                if len(search_result) == 0:
-                    # Repeat search request in case of missing results with less strict keyword matching
-                    search_parameters.keywords_option = SearchParameters.KEYWORDS_OPTION_ALL
-                    search_result = search_request_helper.perform_request(search_parameters)
+                if search_result is not None and len(search_result) == 0:
+                    # Repeat search request in case of missing results with less strict keywords matching
+                    logger.info("No exact result for {}}, retrying with name keywords policy"
+                                .format(record.name, record.registry_type, record.registry_id, record.registry_court))
 
-                    if len(search_result) == 0:
-                        logger.warning("No result for {} with identifier {} {} at court {}".
-                                       format(record.name, record.registry_type, record.registry_id,
-                                              record.registry_court))
-                        continue
-                    else:
-                        logger.warning("The search result for {} might not be identical to the desired legal entity"
-                                       .format(record.name))
+            # Perform search request for search policy with just keywords
+            if search_policy == SEARCH_POLICY_KEYWORDS:
+                search_parameters.registry_type = None
+                search_parameters.registry_id = None
+                search_parameters.registry_court = None
+                search_parameters.keywords_option = SearchParameters.KEYWORDS_OPTION_ALL
+                search_result = search_request_helper.perform_request(search_parameters)
 
-            if len(search_result) > 1:
-                logger.warning("Too many results for {} with identifier {} {} at court {}".
-                               format(record.name, record.registry_type, record.registry_id, record.registry_court))
+                if search_result is not None and len(search_result) == 0:
+                    logger.error("No result for {} ".format(record.simple_string()))
+                    continue
+                else:
+                    logger.warning("The search result for {} might not be identical to the desired legal entity"
+                                   .format(record.simple_string()))
+
+            if search_result is None:
+                logger.error("Could not perform search request for {}".format(record.simple_string()))
+                continue
+            elif len(search_result) > 1:
+                logger.error("Too many results for {}".format(record.simple_string()))
                 continue
 
             result: SearchResultEntry = search_result[0]
@@ -325,7 +371,7 @@ def main():
 
             search_request_successful += 1
 
-            entity_information_writer.write(entity_information)
+            entity_information_writer.write(entity_information, search_policy)
             balance_dates_writer.write(entity_information)
 
             if result.record_has_content(RECORD_CONTENT_DOCUMENTS):

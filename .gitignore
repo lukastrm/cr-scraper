@@ -5,3 +5,4 @@ __pycache__
 *.log
 source/*.csv
 .DS_Store
+*.pyz
