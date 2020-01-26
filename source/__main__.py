@@ -208,6 +208,16 @@ def main():
     if options.target_delimiter:
         logger.info("Using source delimiter: {}".format(options.target_delimiter))
 
+    # Set the target directory path for output files
+    path = ""
+
+    if options.target_path:
+        if not os.path.isdir(options.target_path):
+            print("Target path must be a directory: {}".format(options.target_path))
+            sys.exit(1)
+
+        path += options.target_path + os.path.sep
+
     # Initialize web service session
     logger.info("Starting session")
     session = Session(delay=options.delay, request_limit=options.request_limit, limit_interval=options.limit_interval)
@@ -232,16 +242,6 @@ def main():
 
     search_request_counter: int = 0
     search_request_successful: int = 0
-
-    # Set the target directory path for output files
-    path = ""
-
-    if options.target_path:
-        if not os.path.isdir(options.target_path):
-            logger.error("Target path must be a directory: {}".format(options.target_path))
-            sys.exit(1)
-
-        path += options.target_path + os.path.sep
 
     # Set default CSV delimiters if no other values were provided
     if not options.source_delimiter:
@@ -315,7 +315,7 @@ def main():
                     search_policy = SEARCH_POLICY_NAME
 
                     # Repeat search request in case of missing results without formal registry information
-                    logger.info("No exact result for {}}, retrying with name search policy"
+                    logger.info("No exact result for {}, retrying with name search policy"
                                 .format(record.name, record.registry_type, record.registry_id, record.registry_court))
 
             # Perform search request for search policy with matching name
@@ -327,8 +327,10 @@ def main():
                 search_result = search_request_helper.perform_request(search_parameters)
 
                 if search_result is not None and len(search_result) == 0:
+                    search_policy = SEARCH_POLICY_KEYWORDS
+
                     # Repeat search request in case of missing results with less strict keywords matching
-                    logger.info("No exact result for {}}, retrying with name keywords policy"
+                    logger.info("No exact result for {}, retrying with name keywords policy"
                                 .format(record.name, record.registry_type, record.registry_id, record.registry_court))
 
             # Perform search request for search policy with just keywords
@@ -340,7 +342,7 @@ def main():
                 search_result = search_request_helper.perform_request(search_parameters)
 
                 if search_result is not None and len(search_result) == 0:
-                    logger.error("No result for {} ".format(record.simple_string()))
+                    logger.error("No result for {}".format(record.simple_string()))
                     continue
                 else:
                     logger.warning("The search result for {} might not be identical to the desired legal entity"

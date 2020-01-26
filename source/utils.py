@@ -29,6 +29,6 @@ def init_logger():
     LOGGER.addHandler(error_file_handler)
 
     console_handler = logging.StreamHandler(stream=sys.stdout)
-    console_handler.setFormatter(logging.Formatter("\r%(asctime)s [%(levelname)s] %(message)s"))
+    console_handler.setFormatter(log_file_formatter)
     LOGGER.addHandler(console_handler)
     LOGGER.setLevel(logging.INFO)

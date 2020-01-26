@@ -91,10 +91,15 @@ class SearchInputDataFileReader:
         name: str = raw[self.__index_name]
         registry_court: Optional[str] = raw[self.__index_registry_court].strip()
         registry_type: Optional[str] = raw[self.__index_registry_type].strip()
-        registry_id: Optional[str] = re.match(r"^\D*(\d+ ?\w{0,2})\s*$", raw[self.__index_registry_id])
+        registry_id: Optional[str] = re.match(r"[a-zA-Z]*\s?(\d+\s?\w{0,2})\s*", raw[self.__index_registry_id].strip())
+
+        if registry_court == "-9":
+            registry_court = None
 
         if registry_type is not None and registry_type not in REGISTRY_TYPES:
-            utils.LOGGER.error("Omitting invalid registry type {} for search record {}".format(registry_type, name))
+            if registry_type != "-9":
+                utils.LOGGER.error("Omitting invalid registry type {} for search record {}".format(registry_type, name))
+
             registry_type = None
 
         return SearchInputRecord(name, registry_court, registry_type,
@@ -111,7 +116,7 @@ _COL_CAPITAL_CURRENCY = "capital_currency"
 _COL_ENTRY_DAY = "entry_day"
 _COL_ENTRY_MONTH = "entry_month"
 _COL_ENTRY_YEAR = "entry_year"
-_COL_DELETION_DAY = "deletion"
+_COL_DELETION_DAY = "deletion_day"
 _COL_DELETION_MONTH = "deletion_month"
 _COL_DELETION_YEAR = "deletion_year"
 _COL_BALANCE = "balance"
