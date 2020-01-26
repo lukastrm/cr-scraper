@@ -88,7 +88,7 @@ class SearchInputDataFileReader:
         if len(raw) < 6:
             return None
 
-        name: str = raw[self.__index_name]
+        name: str = raw[self.__index_name].strip()
         registry_court: Optional[str] = raw[self.__index_registry_court].strip()
         registry_type: Optional[str] = raw[self.__index_registry_type].strip()
         registry_id: Optional[str] = re.match(r"[a-zA-Z]*\s?(\d+\s?\w{0,2})\s*", raw[self.__index_registry_id].strip())
