@@ -96,35 +96,43 @@ class SearchInputDataFileReader:
         return self
 
     def __next__(self) -> Optional[SearchInputRecord]:
-        raw: str = next(self.__reader)
+        try:
+            raw: str = next(self.__reader)
 
-        if self.__header:
-            self.__index_name = raw.index("firm")
-            self.__index_registry_court = raw.index("city")
-            self.__index_registry_type = raw.index("hrsection")
-            self.__index_registry_id = raw.index("hrid")
-            self.__header = False
-            raw = next(self.__reader)
+            if self.__header:
+                self.__index_name = raw.index("firm")
+                self.__index_registry_court = raw.index("city")
+                self.__index_registry_type = raw.index("hrsection")
+                self.__index_registry_id = raw.index("hrid")
+                self.__header = False
+                raw = next(self.__reader)
 
-        if len(raw) < 6:
-            return None
+            if len(raw) < 6:
+                return None
 
-        name: str = raw[self.__index_name].strip()
-        registry_court: Optional[str] = raw[self.__index_registry_court].strip()
-        registry_type: Optional[str] = raw[self.__index_registry_type].strip()
-        registry_id: Optional[str] = re.match(r"[a-zA-Z]*\s?(\d+\s?\w{0,2})\s*", raw[self.__index_registry_id].strip())
+            name: str = raw[self.__index_name].strip()
+            registry_court: Optional[str] = raw[self.__index_registry_court].strip()
+            registry_type: Optional[str] = raw[self.__index_registry_type].strip()
+            registry_id: Optional[str] = re.match(r"[a-zA-Z]*\s?(\d+\s?\w{0,2})\s*",
+                                                  raw[self.__index_registry_id].strip())
 
-        if registry_court == "-9":
-            registry_court = None
+            if registry_court == "-9":
+                registry_court = None
 
-        if registry_type is not None and registry_type not in REGISTRY_TYPES:
-            if registry_type != "-9":
-                utils.LOGGER.error("Omitting invalid registry type {} for search record {}".format(registry_type, name))
+            if registry_type is not None and registry_type not in REGISTRY_TYPES:
+                if registry_type != "-9":
+                    utils.LOGGER.error(
+                        "Omitting invalid registry type {} for search record {}".format(registry_type, name))
 
-            registry_type = None
+                registry_type = None
 
-        return SearchInputRecord(name, registry_court, registry_type,
-                                 None if registry_id is None else registry_id.group(1).strip())
+            return SearchInputRecord(name, registry_court, registry_type,
+                                     None if registry_id is None else registry_id.group(1).strip())
+        except ValueError as e:
+            utils.LOGGER.error("Malformed input data")
+            utils.LOGGER.exception(e)
+
+        raise StopIteration
 
 
 _COL_NAME = "name"
