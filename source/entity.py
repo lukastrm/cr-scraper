@@ -12,6 +12,9 @@ import requests
 from html.parser import HTMLParser
 from typing import List, Optional
 
+from requests import RequestException
+
+import utils
 from search import SearchResultEntry
 from service import DEFAULT_DOCUMENT_URL
 
@@ -20,11 +23,30 @@ REGISTRY_TYPES = ["HRA", "HRB", "GnR", "PR", "VR"]
 
 
 class LegalEntityInformation:
+    """This class represents the data structure for the legal entity information."""
 
-    def __init__(self, name: Optional[str] = None, court: Optional[str] = None, registry_type: Optional[str] = None, registry_id: Optional[str] = None,
-                 structure: Optional[str] = None, capital: Optional[int] = None, capital_currency: Optional[str] = None, entry: Optional[str] = None,
-                 deletion: Optional[str] = None, balance: Optional[List[str]] = None, address: Optional[str] = None, post_code: Optional[str] = None,
+    def __init__(self, name: Optional[str] = None, court: Optional[str] = None, registry_type: Optional[str] = None,
+                 registry_id: Optional[str] = None, structure: Optional[str] = None, capital: Optional[int] = None,
+                 capital_currency: Optional[str] = None, entry: Optional[str] = None, deletion: Optional[str] = None,
+                 balance: Optional[List[str]] = None, address: Optional[str] = None, post_code: Optional[str] = None,
                  city: Optional[str] = None):
+        """
+        Initialize a `LegalEntityInformation` object.
+
+        :param name: the entity name
+        :param court: the court name where the entity is registered
+        :param registry_type: the type of the registry record
+        :param registry_id: the identifier of the registry record
+        :param structure: the legal entity structure
+        :param capital: the capital
+        :param capital_currency: the capital currency
+        :param entry: the entry date for that record
+        :param deletion: the deletion date for that record
+        :param balance: a list of dates from available balances
+        :param address: the street address of the office address
+        :param post_code: the post code of the office address
+        :param city: the city of the office address
+        """
         if registry_type is not None and registry_type not in REGISTRY_TYPES:
             raise ValueError("Unknown registry type")
 
@@ -50,27 +72,41 @@ class LegalEntityInformation:
 
 
 class LegalEntityInformationFetcher:
+    """This class fetches the legal entity information based on a given search result."""
 
     def __init__(self, session, search_result_entry: SearchResultEntry, url=DEFAULT_DOCUMENT_URL):
+        """
+        Initialize a `LegalEntityInformationFetcher` object.
+
+        :param session: the `Session` object for the current session
+        :param search_result_entry: the given search result entry for which the information should be extracted
+        :param url: the legal entity information url that gives access to the information
+        """
+
         self.__session = session
         self.__entry: SearchResultEntry = search_result_entry
         self.__url = url
         self.result: Optional[LegalEntityInformation] = None
 
     def fetch(self) -> Optional[LegalEntityInformation]:
-        result = requests.get(self.__url, params={"doctyp": "UT", "index": self.__entry.index},
-                              cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
+        """
+        Runs the fetching operation.
 
-        if result.status_code == 200:
-            parser = LegalEntityInformationParser()
-            parser.feed(result.text)
+        :return: the `LegalEntityInformation` object containing the legal entity information or
+        None if the request failed
+        """
 
-            # TODO: Better solution
-            if "Fehler" in result.text:
-                print("FEHLER")
+        try:
+            result = requests.get(self.__url, params={"doctyp": "UT", "index": self.__entry.index},
+                                  cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
 
-            self.result = parser.result
-            return self.result
+            if result.status_code == 200:
+                parser = LegalEntityInformationParser()
+                parser.feed(result.text)
+                self.result = parser.result
+                return self.result
+        except RequestException as e:
+            utils.LOGGER.exception(e)
 
         return None
 
@@ -99,6 +135,13 @@ SUB_STATE_AWAIT_BALANCE = 6
 
 
 class LegalEntityInformationParser(HTMLParser):
+    """
+    This class parses the HTML result data that was fetched by the request of the `LegalEntityInformationFetcher`
+    object. See the documentation for `HTMLParser` for more information about the implemented methods.
+
+    This class is an implementation of a simple state machine to parse the given HTML content and extract relevant
+    legal entity information. The result is a `LegalEntityInformation` object representing the extracted information.
+    """
 
     KEYWORD_LEGAL_STRUCTURE = "Rechtsform"
     KEYWORD_CAPITAL = "Kapital"
@@ -217,64 +260,56 @@ class LegalEntityInformationParser(HTMLParser):
                 self.sub_state = SUB_STATE_VOID
 
     def __set_registry_information(self, data):
-        information = re.match(r"^\s*(.*?)\s+(HRA|HRB|GnR|PR|VR)\s+(\d*?(?:\s+[a-zA-Z]{1,2})?)\s*$", data)
+        match = re.match(r"^\s*(.*?)\s+(HRA|HRB|GnR|PR|VR)\s+(\d*?(?:\s+[a-zA-Z]{1,2})?)\s*$", data)
 
-        if information is not None:
-            self.result.registry_court = information.group(1)
-            self.result.registry_type = information.group(2)
-            self.result.registry_id = re.sub(r"\s\s+", " ", information.group(3))
+        if match is not None:
+            self.result.registry_court = match.group(1)
+            self.result.registry_type = match.group(2)
+            self.result.registry_id = re.sub(r"\s\s+", " ", match.group(3))
 
     def __set_name(self, data):
-        p = re.compile(r"^\s*–\s*(.*?)\s*$")
-        name = p.match(data)
+        match = re.match(r"^\s*–\s*(.*?)\s*$", data)
 
-        if name is not None:
-            self.result.name = name.group(1)
+        if match is not None:
+            self.result.name = match.group(1)
 
     def __set_structure(self, data):
-        p = re.compile(r"^\s*(.*?)\s*$")
-        structure = p.match(data)
+        match = re.match(r"^\s*(.*?)\s*$", data)
 
-        if structure is not None:
-            self.result.structure = structure.group(1)
+        if match is not None:
+            self.result.structure = match.group(1)
 
     def __set_capital(self, data):
-        p = re.compile(r"^\s*((?:(?:\d{1,3})(?:\.\d{3})+|\d+)(?:,\d{1,2})?)\s*(EUR|DEM|€)?\s*$")
-        capital = p.match(data)
+        match = re.match(r"^\s*((?:(?:\d{1,3})(?:\.\d{3})+|\d+)(?:,\d{1,2})?)\s*(EUR|DEM|€)?\s*$", data)
 
-        if capital is not None:
-            self.result.capital = float(capital.group(1).replace(".", "").replace(",", "."))
-            self.result.capital_currency = capital.group(2)
+        if match is not None:
+            self.result.capital = float(match.group(1).replace(".", "").replace(",", "."))
+            self.result.capital_currency = match.group(2)
 
     def __set_date(self, data, entry):
-        p = re.compile(r"^\s*(\d{2}.\d{2}.\d{4})")
-        date = p.match(data)
+        match = re.match(r"^\s*(\d{2}.\d{2}.\d{4})", data)
 
-        if date is not None:
+        if match is not None:
             if entry:
-                self.result.entry = date.group(1)
+                self.result.entry = match.group(1)
             else:
-                self.result.deletion = date.group(1)
+                self.result.deletion = match.group(1)
 
     def __process_balance(self, data):
-        p = re.compile(r"^\s*(\d{2}.\d{2}.\d{4})\s*$")
-        date = p.match(data)
+        match = re.match(r"^\s*(\d{2}.\d{2}.\d{4})\s*$", data)
 
-        if date is not None:
-            self.result.balance.append(date.group(1))
+        if match is not None:
+            self.result.balance.append(match.group(1))
 
     def __set_address(self, data):
-        # p = re.compile("^\s*([^\d\n]*[^\d\n\s])\s*(\d+[^\d\n\s-]?(?:-\d+[^\d\n\s]?)?)?\s*$")
-        p = re.compile(r"^\s*(.*?)\s*$")
-        address = p.match(data)
+        match = re.match(r"^\s*(.*?)\s*$", data)
 
-        if address is not None:
-            self.result.address = address.group(1)
+        if match is not None:
+            self.result.address = match.group(1)
 
     def __set_city(self, data):
-        p = re.compile(r"^\s*(?:(\d{5})\s+)?([^\d\n]+)\s*$")
-        city = p.match(data)
+        match = re.match(r"^\s*(?:(\d{5})\s+)?([^\d\n]+)\s*$", data)
 
-        if city is not None:
-            self.result.post_code = city.group(1)
-            self.result.city = city.group(2)
+        if match is not None:
+            self.result.post_code = match.group(1)
+            self.result.city = match.group(2)

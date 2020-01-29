@@ -7,10 +7,13 @@ Technical University of Berlin.
 Every distribution, modification, performing and every other type of usage is strictly prohibited if not
 explicitly allowed by the package license agreement, service contract or other legal regulations.
 """
-import requests as rq
 from html.parser import HTMLParser
 from typing import Dict, Optional, List
 
+import requests
+from requests import RequestException
+
+import utils
 from service import Session
 
 DEFAULT_SEARCH_URL = "https://www.handelsregister.de/rp_web/search.do"
@@ -149,13 +152,17 @@ class SearchRequestHelper:
         :param parameters: the `SearchParameters` object containing the parameter values
         :return: a Python list of `SearchResultEntry` objects or None if the request failed
         """
-        result = rq.post(self.__url + ";jsessionid=" + self.__session.identifier, data=parameters.as_request_data(),
-                         cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
+        try:
+            result = requests.post(self.__url + ";jsessionid=" + self.__session.identifier,
+                                   data=parameters.as_request_data(),
+                                   cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
 
-        if result.status_code == 200 and result.text is not None:
-            parser = SearchResultParser()
-            parser.feed(result.text)
-            return parser.result
+            if result.status_code == 200 and result.text is not None:
+                parser = SearchResultParser()
+                parser.feed(result.text)
+                return parser.result
+        except RequestException as e:
+            utils.LOGGER.exception(e)
 
         return None
 
@@ -182,7 +189,8 @@ class SearchResultParser(HTMLParser):
 
     This class is an implementation of a simple state machine to parse the given HTML content and extract relevant
     search result information. The result is a python list of `SearchResultEntry` objects representing the extracted
-    information."""
+    information.
+    """
 
     def __init__(self):
         super().__init__()

@@ -14,6 +14,7 @@ LOGGER = None
 
 
 def init_logger():
+    """This functions set responsible for setting up the console and file loggers."""
     global LOGGER
 
     log_file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")

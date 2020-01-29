@@ -19,6 +19,7 @@ ENCODING = "utf-8"
 
 
 def date_components(date: str):
+    """This method splits a given string date into its day, month and year values and returns them as a python list."""
     if date:
         match = re.match(r"(\d{1,2}).(\d{1,2}).(\d{2,4})", date)
 
@@ -29,9 +30,19 @@ def date_components(date: str):
 
 
 class SearchInputRecord:
+    """This class represents the data structure for a single search input record."""
 
     def __init__(self, name: str = None, registry_court: Optional[str] = None, registry_type: Optional[str] = None,
                  registry_id: Optional[str] = None):
+        """
+        Initialize a `SearchInputRecord` object.
+
+        :param name: the entity name
+        :param registry_court: the court name where the entity is registered
+        :param registry_type: the type of the registry record
+        :param registry_id: the identifier of the registry record
+        """
+
         self.name: str = name
         self.registry_court: Optional[str] = registry_court
         self.registry_type: Optional[str] = registry_type
@@ -50,8 +61,18 @@ class SearchInputRecord:
 
 
 class SearchInputDataFileReader:
+    """This class is an iterable file reader implementation that provides line-by-line access to a
+    CSV-formatted search input data set."""
 
     def __init__(self, path: str, header: bool = True, delimiter: str = ","):
+        """
+        Initialize a `SearchInputDataFileReader` object.
+
+        :param path: the file path
+        :param header: True if the file contains a header line, False otherwise
+        :param delimiter: the CSV delimiter for that file
+        """
+
         self.__path: str = path
         self.__header: bool = header
         self.__delimiter = delimiter
@@ -127,8 +148,17 @@ _COL_SEARCH_POLICY = "search_policy"
 
 
 class LegalEntityInformationFileWriter:
+    """This class is a file writer implementation that provides single line data output to a CSV-formatted file for
+    `LegalEntityInformation` objects."""
 
     def __init__(self, path: str, delimiter: str = ","):
+        """
+        Initialize a `LegalEntityInformationFileWriter` object.
+
+        :param path: the output file path
+        :param delimiter: the CSV delimiter for that file
+        """
+
         self.__path: str = path
         self.__delimiter: str = delimiter
 
@@ -149,6 +179,8 @@ class LegalEntityInformationFileWriter:
         self.__file.close()
 
     def write(self, entity: LegalEntityInformation, search_policy: int):
+        """Writes the given `LegalEntityInformation` object's information to the file."""
+
         self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
                                 entity.structure, entity.capital, entity.capital_currency,
                                 *date_components(entity.entry),  *date_components(entity.deletion),
@@ -163,8 +195,16 @@ _COL_BALANCE_YEAR = "balance_year"
 
 
 class LegalEntityBalanceDatesFileWriter:
+    """This class is a file writer implementation that provides single line data output to a CSV-formatted file for
+    the balance dates of `LegalEntityInformation` objects."""
 
     def __init__(self, path: str, delimiter: str = ","):
+        """
+        Initialize a `LegalEntityBalanceDatesFileWriter` object.
+
+        :param path: the output file path
+        :param delimiter: the CSV delimiter for that file
+        """
         self.__path = path
         self.__delimiter = delimiter
 
@@ -183,6 +223,8 @@ class LegalEntityBalanceDatesFileWriter:
         self.__file.close()
 
     def write(self, entity: LegalEntityInformation):
+        """Writes the given balance dates of the `LegalEntityInformation` object to the file."""
+
         if entity.balance:
             for date in entity.balance:
                 self.__writer.writerow([entity.name, entity.registry_type, entity.registry_id, entity.registry_court,
@@ -197,8 +239,17 @@ _COL_LIST_DATE_YEAR = "list_date_year"
 
 
 class ShareHolderListsFileWriter:
+    """This class is a file writer implementation that provides single line data output to a CSV-formatted file for
+    `ShareholderLists` objects."""
 
     def __init__(self, path: str, delimiter: str = ","):
+        """
+        Initialize a `ShareHolderListsFileWriter` object.
+
+        :param path: the output file path
+        :param delimiter: the CSV delimiter for that file
+        """
+
         self.__path = path
         self.__delimiter = delimiter
 
@@ -214,6 +265,8 @@ class ShareHolderListsFileWriter:
         self.__file.close()
 
     def write(self, lists: ShareholderLists):
+        """Writes the given `ShareholderLists` object to the file."""
+
         if lists is None:
             return
 

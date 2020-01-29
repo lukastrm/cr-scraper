@@ -13,19 +13,39 @@ from typing import List, Optional
 import requests
 from html.parser import HTMLParser
 
+from requests import RequestException
+
+import utils
 from entity import LegalEntityInformation
 from search import SearchResultEntry
 from service import Session, DEFAULT_DOCUMENT_URL
 
 
 class DocumentsTreeElement:
+    """This class represents the data structure for a single element in the web service's documents tree."""
 
     def __init__(self, name: str = None, as_directory: bool = False, parent: "DocumentsTreeElement" = None):
+        """
+        Initialize a `DocumentsTreeElement`.
+
+        :param name: the name of that element
+        :param as_directory: True if that element serves as a directory for other elements, False otherwise
+        :param parent: the parent element or None for the root of the tree
+        """
+
         self.name: Optional[str] = name
         self.parent: Optional[DocumentsTreeElement] = parent
         self.children: Optional[List[DocumentsTreeElement]] = [] if as_directory else None
 
     def create_child(self, name: str = None, as_directory: bool = False) -> "DocumentsTreeElement":
+        """
+        Creates a child element if this element is a directory.
+
+        :param name: the name of the child element
+        :param as_directory: True if the child element is a directory, False otherwise
+        :return: the element that was created
+        """
+
         element = DocumentsTreeElement(name, as_directory, self)
 
         if self.children is not None:
@@ -43,13 +63,31 @@ class DocumentsTreeElement:
 
 
 class ShareholderLists:
+    """This class represents the data structure for a list of shareholder list dates"""
 
     def __init__(self, entity: LegalEntityInformation, documents: DocumentsTreeElement):
+        """
+        Initialize a `ShareholderLists` object.
+
+        :param entity: the corresponding legal entity the documents refer to
+        :param documents: the documents as `DocumentsTreeElement` as obtained from `DocumentsTreeFetcher`
+        """
+
         self.entity = entity
         self._documents = documents
         self.dates: List[Optional[str]] = self.__extract(documents.children)
 
-    def __extract(self, documents: List[DocumentsTreeElement], is_shareholder_lists: bool = False) -> List[Optional[str]]:
+    def __extract(self, documents: List[DocumentsTreeElement], is_shareholder_lists: bool = False) -> \
+            List[Optional[str]]:
+        """
+        Extracts the shareholder list dates from a given document tree.
+
+        :param documents: the document directory as `DocumentsTreeElement` object
+        :param is_shareholder_lists: True if the documents object is a subdirectory of a shareholder lists directory,
+        False otherwise
+        :return: a python string list of shareholder list dates
+        """
+
         dates = []
 
         for document in documents:
@@ -74,24 +112,41 @@ class ShareholderLists:
 
 
 class DocumentsTreeFetcher:
+    """This class fetches the documents tree for a legal entity based on a given search result."""
 
     def __init__(self, session: Session, url: str = DEFAULT_DOCUMENT_URL):
+        """
+        Initialize a `DocumentsTreeFetcher` object.
+
+        :param session: the `Session` object for the current session
+        :param url: the documents url that gives access to the information
+        """
+
         self.__session: Session = session
         self.__url: str = url
         self.result: Optional[DocumentsTreeElement] = None
 
     def fetch(self, search_result_entry: SearchResultEntry) -> Optional[DocumentsTreeElement]:
-        result = requests.get(self.__url, params={"doctyp": "DK", "index": search_result_entry.index},
-                              cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
+        """
+        Runs the fetching operation.
 
-        if result.status_code == 200:
-            parser = DocumentsTreeParser()
-            parser.feed(result.text)
+        :return: the `DocumentsTreeElement` object containing the documents' information or None if the request failed
+        """
 
-            if parser.result is not None:
-                self.result = parser.result
+        try:
+            result = requests.get(self.__url, params={"doctyp": "DK", "index": search_result_entry.index},
+                                  cookies={"JSESSIONID": self.__session.identifier, "language": "de"})
 
-            return self.result
+            if result.status_code == 200:
+                parser = DocumentsTreeParser()
+                parser.feed(result.text)
+
+                if parser.result is not None:
+                    self.result = parser.result
+
+                return self.result
+        except RequestException as e:
+            utils.LOGGER.exception(e)
 
         return None
 
@@ -105,6 +160,13 @@ _STATE_FINISHED = 5
 
 
 class DocumentsTreeParser(HTMLParser):
+    """
+    This class parses the HTML result data that was fetched by the request of the `DocumentsTreeFetcher`
+    object. See the documentation for `HTMLParser` for more information about the implemented methods.
+
+    This class is an implementation of a simple state machine to parse the given HTML content and extract relevant
+    documents' information. The result is a `DocumentsTreeElement` object representing the extracted information.
+    """
 
     def __init__(self):
         super().__init__()
