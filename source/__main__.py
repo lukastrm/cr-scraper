@@ -169,7 +169,7 @@ def main():
         options.set_option(option, None)
 
     if options.help:
-        print("Usage: crreader <File> ([<Option> <Value>])")
+        print("Usage: PROG [file] [[Option] [Value]]")
         return
 
     # Initialize logger
