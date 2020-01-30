@@ -49,7 +49,7 @@ class SearchInputRecord:
         self.registry_id: Optional[str] = registry_id
 
     def simple_string(self) -> str:
-        return "{} ({} {}, {})".format(self.name, self.registry_type if self.registry_type else "unknown registry type",
+        return "${};{} {};{})$".format(self.name, self.registry_type if self.registry_type else "unknown registry type",
                                        self.registry_id if self.registry_id else "unknown registry id",
                                        self.registry_court if self.registry_court else "unknown court")
 

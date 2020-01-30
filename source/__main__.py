@@ -299,9 +299,8 @@ def main():
                     if court is None:
                         logger.warning("No court identifier found for {}".format(record.registry_court))
                     else:
-                        logger.warning("Closest match for {} regarding {} ({} {}) is court {} with identifier {}"
-                                       .format(record.registry_court, record.name, record.registry_type,
-                                               record.registry_id, court.name, court.identifier))
+                        logger.warning("Closest match for {} is court {} with identifier {}"
+                                       .format(record.simple_string(), court.name, court.identifier))
 
                 search_parameters.registry_court = court.identifier
 
