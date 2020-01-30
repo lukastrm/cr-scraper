@@ -48,7 +48,7 @@ class RuntimeOptions:
 
     def __init__(self):
         self.help: bool = False
-        self.rows: Tuple[int, int] = (-1, -1)
+        self.rows: Tuple[int, int] = (0, 0)
         self.delay: int = 10
         self.request_limit = 60
         self.limit_interval: int = 60 * 60
@@ -67,14 +67,14 @@ class RuntimeOptions:
         if option == _OPTION_HELP:
             self.help = True
         elif option == _OPTION_ROWS:
-            match = re.match(r"^(-1|\d*),(-1|\d*)$", raw_value)
+            match = re.match(r"^(\d*),(\d*)$", raw_value)
 
             if match:
                 raw_lower = match.group(1)
                 raw_upper = match.group(2)
 
-                lower = int(raw_lower) if raw_lower else -1
-                upper = int(raw_upper) if raw_upper else -1
+                lower = int(raw_lower) if raw_lower else 0
+                upper = int(raw_upper) if raw_upper else 0
 
                 if lower >= 0 and 0 <= upper < lower:
                     lower = upper
@@ -178,9 +178,10 @@ def main():
 
     # Log session options
     if options.rows[0] > 0 or options.rows[1] > 0:
+        lower = options.rows[0]
         upper = options.rows[1]
-        logger.info("Restricting analysis to input row indices {} to {}"
-                    .format(max(options.rows[0], 0), upper if upper >= 0 else "MAX"))
+        logger.info("Restricting analysis to input rows {} to {}"
+                    .format(lower if lower > 0 else "(first)", upper if upper > 0 else "(last)"))
 
     if options.delay > 0:
         logger.info("Request delay: {} seconds".format(options.delay))
@@ -264,17 +265,19 @@ def main():
         # Iterate through all search input records
         for i, record in enumerate(reader):
             if options.rows is not None:
-                if i < options.rows[0]:
+                if i < options.rows[0] - 1:
                     continue
-                elif 0 <= options.rows[1] <= i:
+                elif 0 < options.rows[1] <= i:
                     break
 
             if record is None:
                 continue
 
             if session.is_limit_reached():
-                logger.info("Reached request limit after search record {}, delaying request"
-                            .format(search_request_counter))
+                if search_request_counter > 0:
+                    logger.info("Reached request limit after search record {}, delaying request"
+                                .format(search_request_counter))
+
                 print("> Delaying request{}\r".format(" " * 40))
 
             session.make_limited_request()
@@ -302,7 +305,7 @@ def main():
 
                 search_parameters.registry_court = court.identifier
 
-            search_request_counter += 1
+            search_request_counter = i + 1
             print("> Processing record {}{}\r".format(search_request_counter, " " * 40), end="")
 
             search_result: Optional[List[SearchResultEntry]] = None
