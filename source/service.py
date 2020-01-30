@@ -54,6 +54,10 @@ class Session:
 
             if result.status_code == 200 and SESSION_COOKIE_NAME in result.cookies:
                 self.identifier = result.cookies[SESSION_COOKIE_NAME]
+            else:
+                if "403.html" in result.url:
+                    utils.LOGGER.error("Access to web service denied")
+                    return
         except RequestException as e:
             utils.LOGGER.exception(e)
 
